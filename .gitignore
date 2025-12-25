@@ -1,1 +1,5 @@
+# Rust build artifacts
 /target
+
+# Devenv files
+.devenv*

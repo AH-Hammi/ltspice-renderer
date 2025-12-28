@@ -14,7 +14,7 @@ mod symbol;
 
 fn main() {
     // load a sample ASC file and parse it
-    let document = asc_document::AscDocument::from_path("test_files/simple_sample.asc")
+    let document = asc_document::AscDocument::from_path("test_files/complex_sample.asc")
         .expect("Failed to read ASC file");
     println!("Parsed document: {:?}", document);
 }

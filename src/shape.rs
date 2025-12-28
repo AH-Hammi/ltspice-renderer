@@ -255,10 +255,11 @@ pub enum TextType {
 }
 
 impl TextType {
-    pub fn from_str(s: &str) -> Option<TextType> {
-        match s {
-            "!" => Some(TextType::SpiceDirective),
-            ";" => Some(TextType::Comment),
+    fn from_str(s: &str) -> Option<TextType> {
+        let first_char = s.chars().next()?;
+        match first_char {
+            '!' => Some(TextType::SpiceDirective),
+            ';' => Some(TextType::Comment),
             _ => None,
         }
     }
@@ -274,7 +275,7 @@ pub struct Text {
 }
 
 impl Text {
-    fn parse_line(line: &str) -> Option<Text> {
+    fn parse_line(line: &str, is_symbol: bool) -> Option<Text> {
         // The format is TEXT {PositionX} {PositionY} {Justification} {Size} {TypeSpecifier}{Content}
         let parts = line.splitn(6, ' ').collect::<Vec<&str>>();
         if parts.len() < 6 || parts[0] != "TEXT" {
@@ -285,16 +286,13 @@ impl Text {
         let justification = TextJustification::from_str(parts[3])?;
         let size = TextSize::from_str(parts[4])?;
 
-        let content;
-        let text_type;
-        // Check if the first character of parts[5] is a type specifier
-        if let Some(parsed_text_type) = TextType::from_str(&parts[5][..1]) {
-            content = &parts[5][1..];
-            text_type = Some(parsed_text_type);
+        let (text_type, content) = if is_symbol {
+            // For symbols, default to no type specifier
+            (None, parts[5])
         } else {
-            text_type = None;
-            content = parts[5];
-        }
+            // For non-symbols, check for type specifier
+            (Some(TextType::from_str(&parts[5]).unwrap()), &parts[5][1..])
+        };
         Some(Text {
             position: (position_x, position_y),
             justification,
@@ -316,14 +314,14 @@ pub enum Shape {
 }
 
 impl Shape {
-    pub fn parse_line(line: &str) -> Option<Shape> {
+    pub fn parse_line(line: &str, is_symbol: bool) -> Option<Shape> {
         let first_word = line.split_whitespace().next().unwrap_or("");
         match first_word {
             "LINE" => Line::parse_line(line).map(Shape::Line),
             "RECTANGLE" => Rectangle::parse_line(line).ok().map(Shape::Rectangle),
             "CIRCLE" => Circle::parse_line(line).map(Shape::Circle),
             "ARC" => Arc::parse_line(line).ok().map(Shape::Arc),
-            "TEXT" => Text::parse_line(line).map(Shape::Text),
+            "TEXT" => Text::parse_line(line, is_symbol).map(Shape::Text),
             _ => None,
         }
     }
@@ -369,7 +367,7 @@ mod tests {
     #[test]
     fn test_shape_parsing() {
         let line_str = "LINE Normal 80 400 80 368 1";
-        let shape = Shape::parse_line(line_str).unwrap();
+        let shape = Shape::parse_line(line_str, false).unwrap();
         match shape {
             Shape::Line(line) => {
                 assert_eq!(line.start, (80, 400));
@@ -382,7 +380,7 @@ mod tests {
     #[test]
     fn test_parse_text_with_comment() {
         let line = "TEXT 480 720 Center 2 ;This is a comment";
-        let text = Text::parse_line(line).expect("Failed to parse TEXT line");
+        let text = Text::parse_line(line, false).expect("Failed to parse TEXT line");
         assert_eq!(text.position, (480, 720));
         assert_eq!(text.justification, TextJustification::Center);
         assert_eq!(text.size, TextSize::SIZE15);
@@ -393,7 +391,7 @@ mod tests {
     #[test]
     fn test_parse_text_with_spice_directive() {
         let line = "TEXT 100 200 Left 3 !.MODEL NPN N";
-        let text = Text::parse_line(line).expect("Failed to parse TEXT line");
+        let text = Text::parse_line(line, false).expect("Failed to parse TEXT line");
         assert_eq!(text.position, (100, 200));
         assert_eq!(text.justification, TextJustification::Left);
         assert_eq!(text.size, TextSize::SIZE20);
@@ -404,11 +402,33 @@ mod tests {
     #[test]
     fn test_valid_symbol_text_line() {
         let line = "TEXT -64 0 Center 2 ADI";
-        let text = Text::parse_line(line).expect("Failed to parse TEXT line");
+        let text = Text::parse_line(line, true).expect("Failed to parse TEXT line");
         assert_eq!(text.position, (-64, 0));
         assert_eq!(text.justification, TextJustification::Center);
         assert_eq!(text.size, TextSize::SIZE15);
         assert_eq!(text.text_type, None); // Default type when no specifier
         assert_eq!(text.content, "ADI");
+    }
+
+    #[test]
+    fn test_line_break_text() {
+        let line = "TEXT -688 -248 Left 2 ;Note: 0.1 μF decoupling capacitors are required \non the primary and secondary supplies. If they \nare driven from the same supply, then one set of\n 0.1 μF decoupling capacitors is sufficient.";
+        let text = Text::parse_line(line, false).expect("Failed to parse TEXT line");
+        assert_eq!(text.position, (-688, -248));
+        assert_eq!(text.justification, TextJustification::Left);
+        assert_eq!(text.size, TextSize::SIZE15);
+        assert_eq!(text.text_type, Some(TextType::Comment));
+        assert_eq!(text.content, "Note: 0.1 μF decoupling capacitors are required \non the primary and secondary supplies. If they \nare driven from the same supply, then one set of\n 0.1 μF decoupling capacitors is sufficient.");
+    }
+
+    #[test]
+    fn one_character_symbol_text_content() {
+        let line = "TEXT -120 128 Left 3 −";
+        let text = Text::parse_line(line, true).expect("Failed to parse TEXT line");
+        assert_eq!(text.position, (-120, 128));
+        assert_eq!(text.justification, TextJustification::Left);
+        assert_eq!(text.size, TextSize::SIZE20);
+        assert_eq!(text.text_type, None);
+        assert_eq!(text.content, "−");
     }
 }

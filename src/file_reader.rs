@@ -14,23 +14,21 @@ fn read_utf16_file(path: &str) -> std::io::Result<Vec<String>> {
             "Failed to decode UTF-16BE file",
         ));
     }
-    let lines = decoded
+    Ok(decoded
         .lines()
-        .map(|line| line.replace("\0", "").replace("\r", ""))
-        .collect();
-    Ok(lines)
+        .map(|line| line.to_string().replace("\r", ""))
+        .collect())
 }
 
 fn read_utf8_file(path: &str) -> std::io::Result<Vec<String>> {
     let content = std::fs::read_to_string(path)?;
-    let lines = content
-        .lines()
-        .map(|line| line.replace("\0", "").replace("\r", ""))
-        .collect();
-    Ok(lines)
+    let lines = content.lines();
+    Ok(lines
+        .map(|line| line.to_string().replace("\r", ""))
+        .collect())
 }
 
-fn read_latin1_file(path: &str) -> std::io::Result<Vec<String>> {
+fn read_windows1252_file(path: &str) -> std::io::Result<Vec<String>> {
     let content = std::fs::read(path);
     if content.is_err() {
         return Err(content.err().unwrap());
@@ -43,28 +41,54 @@ fn read_latin1_file(path: &str) -> std::io::Result<Vec<String>> {
             "Failed to decode Latin1 file",
         ));
     }
-    let lines = decoded
+    Ok(decoded
         .lines()
-        .map(|line| line.replace("\0", "").replace("\r", ""))
-        .collect();
-    Ok(lines)
+        .map(|line| line.to_string().replace("\r", ""))
+        .collect())
+}
+
+fn check_null_characters(lines: &Vec<String>) -> bool {
+    for line in lines {
+        if line.contains('\0') {
+            return true;
+        }
+    }
+    false
 }
 
 pub fn read_file_lines(path: &str) -> std::io::Result<Vec<String>> {
-    if let Ok(lines) = read_utf8_file(path) {
-        return Ok(lines);
+    // Check if a file exists at the given path
+    if !std::path::Path::new(path).exists() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("File not found: {}", path),
+        ));
     }
 
-    if let Ok(lines) = read_latin1_file(path) {
-        return Ok(lines);
+    let windows1252 = read_windows1252_file(path);
+    // Check if the windows1252 read was successful and check if it contains any invalid characters
+    if windows1252.is_ok() && !check_null_characters(&windows1252.as_ref().unwrap()) {
+        return windows1252;
     }
 
-    if let Ok(lines) = read_utf16_file(path) {
-        return Ok(lines);
+    println!("Failed to read as Windows-1252, trying UTF-8...");
+
+    let utf_8 = read_utf8_file(path);
+    // Check if the utf-8 read was successful and check if it contains any invalid characters
+    if utf_8.is_ok() && !check_null_characters(&utf_8.as_ref().unwrap()) {
+        return utf_8;
+    }
+
+    println!("Failed to read as UTF-8, trying UTF-16LE...");
+
+    let utf_16 = read_utf16_file(path);
+    // Check if the utf-16 read was successful and check if it contains any invalid characters
+    if utf_16.is_ok() && !check_null_characters(&utf_16.as_ref().unwrap()) {
+        return utf_16;
     }
 
     Err(std::io::Error::new(
         std::io::ErrorKind::InvalidData,
-        "Failed to read file in UTF-8, UTF-16LE, or Latin1 encoding",
+        "Failed to read file in UTF-8, UTF-16LE, or Windows-1252 encoding",
     ))
 }

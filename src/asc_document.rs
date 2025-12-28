@@ -142,8 +142,17 @@ impl AscDocument {
                 .as_str(),
         );
 
-        for line in file_lines {
-            let first_word = line.split_whitespace().next().unwrap_or("");
+        for (id, line) in file_lines.enumerate() {
+            let first_word = line.split_whitespace().next();
+            if first_word.is_none() {
+                println!(
+                    "Empty line encountered: '{}', Line number: {}, skipping",
+                    line,
+                    id + 3
+                );
+                continue; // skip empty lines
+            }
+            let first_word = first_word.unwrap();
             match first_word {
                 "Version" => {
                     println!("Ignoring redundant Version line: {}", line);
@@ -186,12 +195,9 @@ impl AscDocument {
                 }
                 _ => {
                     // Try to parse as shape
-                    if let Some(shape) = Shape::parse_line(&line) {
+                    if let Some(shape) = Shape::parse_line(&line, false) {
                         shapes.push(shape);
                         continue;
-                    }
-                    if first_word.is_empty() {
-                        continue; // skip empty lines
                     }
                     panic!("Unknown line type: {}", line);
                 }
@@ -264,4 +270,18 @@ mod tests {
         println!();
         println!("All ASC files parsed successfully in {:?}", duration);
     }
+
+    #[test]
+    fn empty_line() {
+        let asc_file = AscDocument::from_path("/home/alexanderh/.local/share/ltspice/dosdevices/c:/users/alexanderh/AppData/Local/LTspice/examples/Applications/LT6372-1.asc")
+            .expect("Failed to read ASC file");
+        asc_file.shapes.iter().for_each(|shape| {
+            println!("{:?}", shape);
+        });
+    }
+
+    // #[test]
+    // fn encoding_test() {
+    //     let asc_file = AscDocument::from("")
+    // }
 }

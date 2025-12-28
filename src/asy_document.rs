@@ -149,7 +149,7 @@ impl AsyDocument {
                 }
                 _ => {
                     // Check for SHAPE lines
-                    if let Some(shape) = Shape::parse_line(&line) {
+                    if let Some(shape) = Shape::parse_line(&line, true) {
                         shapes.push(shape);
                         continue;
                     }

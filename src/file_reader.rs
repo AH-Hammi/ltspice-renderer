@@ -1,7 +1,9 @@
 //! Read a file and return the lines as a vector of strings
 //! Removes any null bytes and carriage returns from the lines
 
-fn read_utf16_file(path: &str) -> std::io::Result<Vec<String>> {
+use std::path::PathBuf;
+
+fn read_utf16_file(path: &PathBuf) -> std::io::Result<Vec<String>> {
     let content = std::fs::read(path);
     if content.is_err() {
         return Err(content.err().unwrap());
@@ -20,7 +22,7 @@ fn read_utf16_file(path: &str) -> std::io::Result<Vec<String>> {
         .collect())
 }
 
-fn read_utf8_file(path: &str) -> std::io::Result<Vec<String>> {
+fn read_utf8_file(path: &PathBuf) -> std::io::Result<Vec<String>> {
     let content = std::fs::read_to_string(path)?;
     let lines = content.lines();
     Ok(lines
@@ -28,7 +30,7 @@ fn read_utf8_file(path: &str) -> std::io::Result<Vec<String>> {
         .collect())
 }
 
-fn read_windows1252_file(path: &str) -> std::io::Result<Vec<String>> {
+fn read_windows1252_file(path: &PathBuf) -> std::io::Result<Vec<String>> {
     let content = std::fs::read(path);
     if content.is_err() {
         return Err(content.err().unwrap());
@@ -56,12 +58,12 @@ fn check_null_characters(lines: &Vec<String>) -> bool {
     false
 }
 
-pub fn read_file_lines(path: &str) -> std::io::Result<Vec<String>> {
+pub fn read_file_lines(path: &PathBuf) -> std::io::Result<Vec<String>> {
     // Check if a file exists at the given path
     if !std::path::Path::new(path).exists() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            format!("File not found: {}", path),
+            format!("File not found: {}", path.display()),
         ));
     }
 
@@ -71,7 +73,7 @@ pub fn read_file_lines(path: &str) -> std::io::Result<Vec<String>> {
         return windows1252;
     }
 
-    println!("Failed to read as Windows-1252, trying UTF-8...");
+    // println!("Failed to read as Windows-1252, trying UTF-8...");
 
     let utf_8 = read_utf8_file(path);
     // Check if the utf-8 read was successful and check if it contains any invalid characters
@@ -79,7 +81,7 @@ pub fn read_file_lines(path: &str) -> std::io::Result<Vec<String>> {
         return utf_8;
     }
 
-    println!("Failed to read as UTF-8, trying UTF-16LE...");
+    // println!("Failed to read as UTF-8, trying UTF-16LE...");
 
     let utf_16 = read_utf16_file(path);
     // Check if the utf-16 read was successful and check if it contains any invalid characters

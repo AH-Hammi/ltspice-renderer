@@ -1,5 +1,7 @@
+use std::path::PathBuf;
+
 use crate::shape::Shape;
-use crate::symbol::Symbol;
+use crate::symbol::{self, Symbol};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Wire {
@@ -82,7 +84,7 @@ impl Flag {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AscDocument {
+pub struct Schematic {
     sheet_size: (i32, i32),
     wires: Vec<Wire>,
     flags: Vec<Flag>,
@@ -90,7 +92,7 @@ pub struct AscDocument {
     shapes: Vec<Shape>,
 }
 
-impl AscDocument {
+impl Schematic {
     fn check_version_line(line: &str) {
         if !line.starts_with("Version ") {
             panic!("Invalid ASC file: missing Version line");
@@ -120,12 +122,26 @@ impl AscDocument {
         }
     }
 
-    pub fn from_path(path: &str) -> std::io::Result<AscDocument> {
+    pub fn from_path_with_symbol_loader(
+        path: &PathBuf,
+        symbol_loader: &mut symbol::SymbolLoader,
+    ) -> std::io::Result<Schematic> {
         let lines = crate::file_reader::read_file_lines(path)?;
-        Ok(AscDocument::parse(lines))
+        Ok(Schematic::parse(lines, symbol_loader))
     }
 
-    pub fn parse(lines: Vec<String>) -> AscDocument {
+    pub fn from_path(path: &PathBuf) -> std::io::Result<Schematic> {
+        let lines = crate::file_reader::read_file_lines(path)?;
+        // Create a symbol loader
+        let mut symbol_loader = symbol::SymbolLoader::new();
+        // Add path of the ASC file's directory to the symbol loader
+        if let Some(parent) = path.parent() {
+            symbol_loader.add_library_path(parent.to_path_buf());
+        }
+        Ok(Schematic::parse(lines, &mut symbol_loader))
+    }
+
+    pub fn parse(lines: Vec<String>, symbol_loader: &mut symbol::SymbolLoader) -> Schematic {
         let mut wires = Vec::new();
         let mut flags = Vec::new();
         let mut symbols = Vec::new();
@@ -173,25 +189,22 @@ impl AscDocument {
                     );
                 }
                 "IOPIN" => {
-                    if let Some(last_flag) = flags.last_mut() {
-                        last_flag.add_io_type(&line);
-                    } else {
-                        panic!("IOPIN line without preceding FLAG: {}", line);
-                    }
+                    let last_flag = flags
+                        .last_mut()
+                        .expect(&format!("IOPIN line without preceding FLAG: {}", line));
+                    last_flag.add_io_type(&line);
                 }
                 "SYMBOL" => {
-                    if let Some(symbol) = Symbol::from_asc_line(&line) {
-                        symbols.push(symbol);
-                    } else {
-                        panic!("Failed to parse SYMBOL line: {}", &line);
-                    }
+                    let symbol = Symbol::from_asc_line(&line, symbol_loader)
+                        .expect(&format!("Failed to parse SYMBOL line: {}", &line));
+                    symbols.push(symbol);
                 }
                 "WINDOW" | "SYMATTR" => {
-                    if let Some(last_symbol) = symbols.last_mut() {
-                        last_symbol.add_attribute(&line);
-                    } else {
-                        panic!("WINDOW line without preceding SYMBOL: {}", line);
-                    }
+                    let last_symbol = symbols.last_mut().expect(&format!(
+                        "{} line without preceding SYMBOL: {}",
+                        first_word, line
+                    ));
+                    last_symbol.add_attribute(&line);
                 }
                 _ => {
                     // Try to parse as shape
@@ -204,7 +217,7 @@ impl AscDocument {
             }
         }
 
-        AscDocument {
+        Schematic {
             sheet_size,
             wires,
             flags,
@@ -236,24 +249,38 @@ mod tests {
     }
 
     #[test]
+    fn test_basic_asc_example() {
+        let document = Schematic::from_path(&PathBuf::from("test_files/text_sample.asc"))
+            .expect("Failed to read ASC file");
+        assert_eq!(document.wires.len(), 0);
+        assert_eq!(document.flags.len(), 0);
+        assert_eq!(document.symbols.len(), 0);
+        assert_eq!(document.shapes.len(), 20);
+    }
+
+    #[test]
     fn test_asc_example() {
-        let document = AscDocument::from_path("test_files/complex_sample.asc")
+        let document = Schematic::from_path(&PathBuf::from("test_files/complex_sample.asc"))
             .expect("Failed to read ASC file");
         assert_eq!(document.wires.len(), 1);
         assert_eq!(document.flags.len(), 6);
-        assert_eq!(document.symbols.len(), 11);
+        assert_eq!(document.symbols.len(), 12);
     }
 
     #[test]
     fn test_all_asc_files_from_examples() {
         let user_name = std::env::var("USER").unwrap();
         // cspell: disable-next-line
-        let lib_path = format!("/home/{user}/.local/share/ltspice/dosdevices/c:/users/{user}/AppData/Local/LTspice/examples", user=user_name);
-        // Recurse through all .asy files in the lib_path also in subdirectories
-        let asc_files = glob::glob(&format!("{}/**/*.asc", lib_path))
+        let examples_path = format!("/home/{user}/.local/share/ltspice/dosdevices/c:/users/{user}/AppData/Local/LTspice/examples", user=user_name);
+        // Recurse through all .asy files in the examples_path also in subdirectories
+        let asc_files = glob::glob(&format!("{}/**/*.asc", examples_path))
             .unwrap()
             .collect::<Vec<_>>();
         let total_files = asc_files.len();
+
+        let mut symbol_loader = symbol::SymbolLoader::new();
+        symbol_loader.add_library_path(PathBuf::from(&examples_path));
+
         println!("Found {} ASC files in LTspice lib", total_files);
         let start_time = std::time::Instant::now();
         for (current_index, entry) in asc_files.iter().enumerate() {
@@ -263,8 +290,8 @@ mod tests {
                 path.to_str().unwrap(),
                 current_index = current_index + 1
             );
-            let _asc_file =
-                AscDocument::from_path(path.to_str().unwrap()).expect("Failed to read ASC file");
+            let _asc_file = Schematic::from_path_with_symbol_loader(path, &mut symbol_loader)
+                .expect("Failed to read ASC file");
         }
         let duration = start_time.elapsed();
         println!();
@@ -273,15 +300,10 @@ mod tests {
 
     #[test]
     fn empty_line() {
-        let asc_file = AscDocument::from_path("/home/alexanderh/.local/share/ltspice/dosdevices/c:/users/alexanderh/AppData/Local/LTspice/examples/Applications/LT6372-1.asc")
+        let asc_file = Schematic::from_path(&PathBuf::from("/home/alexanderh/.local/share/ltspice/dosdevices/c:/users/alexanderh/AppData/Local/LTspice/examples/Applications/LT6372-1.asc"))
             .expect("Failed to read ASC file");
         asc_file.shapes.iter().for_each(|shape| {
             println!("{:?}", shape);
         });
     }
-
-    // #[test]
-    // fn encoding_test() {
-    //     let asc_file = AscDocument::from("")
-    // }
 }

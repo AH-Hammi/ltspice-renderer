@@ -1,4 +1,10 @@
 {
     "rust-analyzer.server.path": "rust-analyzer",
     "nixEnvSelector.suggestion": false,
+    "cSpell.words": [
+        "IOPIN",
+        "PINATTR",
+        "splitn",
+        "SYMATTR"
+    ],
 }

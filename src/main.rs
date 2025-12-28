@@ -6,14 +6,15 @@
     clippy::cargo
 )]
 
-mod asc_parser;
-mod asy_parser;
-mod shape_parser;
+mod asc_document;
+mod asy_document;
+mod file_reader;
+mod shape;
+mod symbol;
 
 fn main() {
     // load a sample ASC file and parse it
-    let asc_content =
-        std::fs::read_to_string("test_files/complex_sample.asc").expect("Failed to read ASC file");
-    let document = asc_parser::AcsDocument::parse(&asc_content);
+    let document = asc_document::AscDocument::from_path("test_files/simple_sample.asc")
+        .expect("Failed to read ASC file");
     println!("Parsed document: {:?}", document);
 }

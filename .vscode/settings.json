@@ -2,9 +2,14 @@
     "rust-analyzer.server.path": "rust-analyzer",
     "nixEnvSelector.suggestion": false,
     "cSpell.words": [
+        "DATAFLAG",
         "IOPIN",
         "PINATTR",
         "splitn",
-        "SYMATTR"
+        "SYMATTR",
+        "VBOTTOM",
+        "VLEFT",
+        "VRIGHT",
+        "VTOP"
     ],
 }

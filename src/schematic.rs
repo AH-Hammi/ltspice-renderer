@@ -307,6 +307,7 @@ mod tests {
 
     #[test]
     fn empty_line() {
+        // cspell: disable-next-line
         let asc_file = Schematic::from_path(&PathBuf::from("/home/alexanderh/.local/share/ltspice/dosdevices/c:/users/alexanderh/AppData/Local/LTspice/examples/Applications/LT6372-1.asc"))
             .expect("Failed to read ASC file");
         asc_file.shapes.iter().for_each(|shape| {

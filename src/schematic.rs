@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::path::PathBuf;
 
 use crate::shape::Shape;
@@ -5,8 +7,8 @@ use crate::symbol::{self, Symbol};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Wire {
-    start: (i32, i32),
-    end: (i32, i32),
+    pub start: (i32, i32),
+    pub end: (i32, i32),
 }
 
 impl Wire {
@@ -47,9 +49,9 @@ impl FlagType {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Flag {
-    position: (i32, i32),
-    name: String,
-    io_type: Option<FlagType>,
+    pub position: (i32, i32),
+    pub name: String,
+    pub io_type: Option<FlagType>,
 }
 
 impl Flag {
@@ -85,11 +87,12 @@ impl Flag {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Schematic {
-    sheet_size: (i32, i32),
-    wires: Vec<Wire>,
-    flags: Vec<Flag>,
-    symbols: Vec<Symbol>,
-    shapes: Vec<Shape>,
+    pub sheet_size: (i32, i32),
+    pub wires: Vec<Wire>,
+    pub flags: Vec<Flag>,
+    pub symbols: Vec<Symbol>,
+    pub shapes: Vec<Shape>,
+    pub symbol_loader: symbol::SymbolLoader,
 }
 
 impl Schematic {
@@ -124,7 +127,7 @@ impl Schematic {
 
     pub fn from_path_with_symbol_loader(
         path: &PathBuf,
-        symbol_loader: &mut symbol::SymbolLoader,
+        symbol_loader: symbol::SymbolLoader,
     ) -> std::io::Result<Schematic> {
         let lines = crate::file_reader::read_file_lines(path)?;
         Ok(Schematic::parse(lines, symbol_loader))
@@ -133,15 +136,17 @@ impl Schematic {
     pub fn from_path(path: &PathBuf) -> std::io::Result<Schematic> {
         let lines = crate::file_reader::read_file_lines(path)?;
         // Create a symbol loader
-        let mut symbol_loader = symbol::SymbolLoader::new();
+        let symbol_loader;
         // Add path of the ASC file's directory to the symbol loader
         if let Some(parent) = path.parent() {
-            symbol_loader.add_library_path(parent.to_path_buf());
+            symbol_loader = symbol::SymbolLoader::new(Some(vec![parent.to_path_buf()]));
+        } else {
+            symbol_loader = symbol::SymbolLoader::new(None);
         }
-        Ok(Schematic::parse(lines, &mut symbol_loader))
+        Ok(Schematic::parse(lines, symbol_loader))
     }
 
-    pub fn parse(lines: Vec<String>, symbol_loader: &mut symbol::SymbolLoader) -> Schematic {
+    pub fn parse(lines: Vec<String>, mut symbol_loader: symbol::SymbolLoader) -> Schematic {
         let mut wires = Vec::new();
         let mut flags = Vec::new();
         let mut symbols = Vec::new();
@@ -195,7 +200,7 @@ impl Schematic {
                     last_flag.add_io_type(&line);
                 }
                 "SYMBOL" => {
-                    let symbol = Symbol::from_asc_line(&line, symbol_loader)
+                    let symbol = Symbol::from_asc_line(&line, &mut symbol_loader)
                         .expect(&format!("Failed to parse SYMBOL line: {}", &line));
                     symbols.push(symbol);
                 }
@@ -223,6 +228,7 @@ impl Schematic {
             flags,
             symbols,
             shapes,
+            symbol_loader: symbol_loader,
         }
     }
 }
@@ -255,7 +261,7 @@ mod tests {
         assert_eq!(document.wires.len(), 0);
         assert_eq!(document.flags.len(), 0);
         assert_eq!(document.symbols.len(), 0);
-        assert_eq!(document.shapes.len(), 20);
+        assert_eq!(document.shapes.len(), 19);
     }
 
     #[test]
@@ -278,8 +284,8 @@ mod tests {
             .collect::<Vec<_>>();
         let total_files = asc_files.len();
 
-        let mut symbol_loader = symbol::SymbolLoader::new();
-        symbol_loader.add_library_path(PathBuf::from(&examples_path));
+        let mut symbol_loader =
+            symbol::SymbolLoader::new(Some(vec![PathBuf::from(&examples_path)]));
 
         println!("Found {} ASC files in LTspice lib", total_files);
         let start_time = std::time::Instant::now();
@@ -290,8 +296,9 @@ mod tests {
                 path.to_str().unwrap(),
                 current_index = current_index + 1
             );
-            let _asc_file = Schematic::from_path_with_symbol_loader(path, &mut symbol_loader)
+            let asc_file = Schematic::from_path_with_symbol_loader(path, symbol_loader)
                 .expect("Failed to read ASC file");
+            symbol_loader = asc_file.symbol_loader;
         }
         let duration = start_time.elapsed();
         println!();

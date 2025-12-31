@@ -12,7 +12,7 @@ use std::{collections::HashMap, path::PathBuf};
 
 use crate::{file_reader::read_file_lines, shape::Shape};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SymbolType {
     Block,
     Cell,
@@ -35,7 +35,7 @@ impl SymbolType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Pin {
     position: (i32, i32),
     name: Option<String>,
@@ -196,9 +196,11 @@ impl LibrarySymbol {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SymbolLoader {
-    cache: Option<HashMap<String, LibrarySymbol>>,
-    library_paths: Vec<PathBuf>,
+    available_symbols: HashMap<String, PathBuf>,
+    short_name_to_id: HashMap<String, String>,
+    used_symbols: HashMap<String, LibrarySymbol>,
 }
 
 impl SymbolLoader {
@@ -207,31 +209,36 @@ impl SymbolLoader {
         vec![
             PathBuf::from(
                 // cspell: disable-next-line
-                format!("/home/{user}/.local/share/ltspice/dosdevices/c:/users/{user}/AppData/Local/LTspice/lib/sym", 
-                user=user_name),
+                format!("/home/{user}/.local/share/ltspice/drive_c/users/{user}/Documents/LTspice", user=user_name),
             ),
             PathBuf::from(
                 // cspell: disable-next-line
-                format!("/home/{user}/.local/share/ltspice/drive_c/users/{user}/Documents/LTspice", user=user_name),
+                format!("/home/{user}/.local/share/ltspice/dosdevices/c:/users/{user}/AppData/Local/LTspice/lib/sym", 
+                user=user_name),
             ),
         ]
     }
 
-    pub fn new() -> Self {
+    pub fn new(extra_library_paths: Option<Vec<PathBuf>>) -> Self {
+        let mut library_paths = extra_library_paths.unwrap_or_else(Vec::new);
+        library_paths.extend(Self::default_library_paths());
+
+        let (available_symbols, name_to_full_name) = Self::load_available_symbols(library_paths);
+
         SymbolLoader {
-            cache: None,
-            library_paths: Self::default_library_paths(),
+            available_symbols,
+            short_name_to_id: name_to_full_name,
+            used_symbols: HashMap::new(),
         }
     }
 
-    pub fn add_library_path(&mut self, path: PathBuf) {
-        self.library_paths.push(path);
-    }
-
-    fn load_library_symbols(&mut self) {
-        // Load all symbols from the library paths into the cache
-        let mut cache: HashMap<String, LibrarySymbol> = HashMap::new();
-        for lib_path in self.library_paths.iter().rev() {
+    fn load_available_symbols(
+        library_paths: Vec<PathBuf>,
+    ) -> (HashMap<String, PathBuf>, HashMap<String, String>) {
+        // Load all available .asy file paths
+        let mut available_symbols: HashMap<String, PathBuf> = HashMap::new();
+        let mut short_name_to_id: HashMap<String, String> = HashMap::new();
+        for lib_path in library_paths.iter().rev() {
             let asy_files = glob::glob(&format!("{}/**/*.asy", lib_path.display()))
                 .unwrap()
                 .collect::<Vec<_>>();
@@ -253,49 +260,72 @@ impl SymbolLoader {
                     .strip_suffix(".asy")
                     .unwrap()
                     .to_lowercase();
-                if let Ok(symbol) = LibrarySymbol::from_path(&path) {
-                    if cache.contains_key(&key) {
-                        println!("Warning: Duplicate symbol key found: {}", key);
-                    }
-                    cache.insert(key, symbol.clone());
-                    // also add entry where only the file name is used as key
-                    if let Some(file_stem) = path.file_stem() {
-                        let file_stem_str = file_stem.to_str().unwrap().to_lowercase();
-                        if !cache.contains_key(&file_stem_str) {
-                            cache.insert(file_stem_str, symbol);
-                        }
-                    }
+                if available_symbols.contains_key(&key) {
+                    println!("Warning: Duplicate symbol key found: {}", key);
                 }
+                let short_name = path.file_stem().unwrap().to_str().unwrap().to_lowercase();
+                available_symbols.insert(key.clone(), path);
+                // Also map short name to full key
+                short_name_to_id.insert(short_name, key);
             }
         }
-        println!("Loaded {} symbols into cache", cache.len());
-        self.cache = Some(cache);
+        println!("Loaded {} symbols into cache", available_symbols.len());
+        (available_symbols, short_name_to_id)
     }
 
-    pub fn load_symbol(&mut self, symbol_name: &str) -> Result<LibrarySymbol, std::io::Error> {
-        if self.cache.is_none() {
-            self.load_library_symbols();
-        }
+    /// Check if a symbol is available and return its full path if it is.
+    fn check_symbol_availability(&mut self, symbol_name: &str) -> Result<String, std::io::Error> {
         let symbol_name = symbol_name
             .replace(r"AutoGenerated\\", "")
             .replace(r"\\", "/")
             .to_lowercase();
-        if let Some(symbol) = self.cache.as_ref().unwrap().get(&symbol_name).cloned() {
-            Ok(symbol)
-        } else {
-            if let Some(symbol) = self
-                .cache
-                .as_ref()
-                .unwrap()
-                .get(symbol_name.split('/').last().unwrap())
+        if self.available_symbols.contains_key(&symbol_name) {
+            return Ok(symbol_name);
+        }
+        let symbol_name = symbol_name.split('/').last().unwrap();
+        if self.short_name_to_id.contains_key(symbol_name) {
+            return Ok(self.short_name_to_id[symbol_name].clone());
+        }
+        // Dump available symbols to file for debugging
+        std::fs::write(
+            "available_symbols.txt",
+            self.available_symbols
+                .keys()
                 .cloned()
-            {
-                Ok(symbol)
-            } else {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    format!("Symbol not found: {}", symbol_name),
-                ))
+                .collect::<Vec<String>>()
+                .join("\n"),
+        )
+        .unwrap();
+        std::eprintln!("Available symbols written to available_symbols.txt for debugging.");
+        std::eprintln!("Requested symbol: {}", symbol_name);
+        std::fs::write(
+            "name_to_id_map.txt",
+            self.short_name_to_id
+                .iter()
+                .map(|(k, v)| format!("{} -> {}", k, v))
+                .collect::<Vec<String>>()
+                .join("\n"),
+        )
+        .unwrap();
+        std::eprintln!("Name to ID map written to name_to_id_map.txt for debugging.");
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Symbol not found: {}", symbol_name),
+        ));
+    }
+
+    /// Mark a symbol as being used. This will add the symbol to the used_symbols list
+    /// and return a unique ID for the symbol instance.
+    pub fn load_symbol(&mut self, symbol_name: &str) -> Result<String, std::io::Error> {
+        let symbol_id = self.check_symbol_availability(symbol_name);
+        match symbol_id {
+            Err(e) => Err(e),
+            Ok(symbol_id) => {
+                self.used_symbols.insert(
+                    symbol_id.clone(),
+                    LibrarySymbol::from_path(&self.available_symbols[&symbol_id])?,
+                );
+                Ok(symbol_id)
             }
         }
     }
@@ -329,9 +359,25 @@ impl SymbolRotation {
     }
 }
 
+impl std::fmt::Display for SymbolRotation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            SymbolRotation::R0 => "0",
+            SymbolRotation::R90 => "90",
+            SymbolRotation::R180 => "180",
+            SymbolRotation::R270 => "270",
+            SymbolRotation::M0 => "0",
+            SymbolRotation::M90 => "90",
+            SymbolRotation::M180 => "180",
+            SymbolRotation::M270 => "270",
+        };
+        write!(f, "{}", s)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Symbol {
-    pub library_symbol: LibrarySymbol,
+    pub symbol_id: String,
     pub position: (i32, i32),
     pub rotation: SymbolRotation,
 }
@@ -344,7 +390,7 @@ impl Symbol {
             return Err(format!("Invalid SYMBOL line: {}", line));
         }
         let symbol_type = parts[1].to_string();
-        let library_symbol = symbol_loader
+        let symbol_id = symbol_loader
             .load_symbol(&symbol_type)
             .map_err(|e| e.to_string())?;
         let position_x = parts[2].parse::<i32>().map_err(|e| e.to_string())?;
@@ -352,7 +398,7 @@ impl Symbol {
         let rotation = SymbolRotation::from_str(parts[4])
             .ok_or_else(|| format!("Invalid rotation: {}", parts[4]))?;
         Ok(Symbol {
-            library_symbol,
+            symbol_id,
             position: (position_x, position_y),
             rotation,
         })
@@ -404,7 +450,7 @@ mod tests {
     #[test]
     fn test_symbol_from_asc_line() {
         let line = "SYMBOL res 100 200 R0";
-        let mut symbol_loader = SymbolLoader::new();
+        let mut symbol_loader = SymbolLoader::new(None);
         let symbol = Symbol::from_asc_line(line, &mut symbol_loader).unwrap();
         assert_eq!(symbol.position, (100, 200));
         assert_eq!(symbol.rotation, SymbolRotation::R0);
@@ -451,11 +497,17 @@ mod tests {
     }
 
     #[test]
-    fn load_library_symbols() {
-        let mut symbol_loader = SymbolLoader::new();
-        symbol_loader.load_library_symbols();
-        assert!(symbol_loader.cache.is_some());
-        let cache = symbol_loader.cache.as_ref().unwrap();
-        assert!(cache.len() > 0);
+    fn load_all_available_library_symbols() {
+        let mut symbol_loader = SymbolLoader::new(None);
+        let available_symbols = symbol_loader.available_symbols.clone();
+        assert!(
+            available_symbols.len() > 0,
+            "No available symbols found in default library paths"
+        );
+        // Mark all symbols as used
+        for symbol_name in available_symbols.keys() {
+            let _ = symbol_loader.load_symbol(symbol_name);
+        }
+        assert_eq!(symbol_loader.used_symbols.len(), available_symbols.len());
     }
 }

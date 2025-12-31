@@ -1,4 +1,4 @@
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LineStyle {
     Solid,
     Dashed,
@@ -19,11 +19,11 @@ impl LineStyle {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Line {
-    start: (i32, i32),
-    end: (i32, i32),
-    style: LineStyle,
+    pub(crate) start: (i32, i32),
+    pub(crate) end: (i32, i32),
+    pub(crate) style: LineStyle,
 }
 
 impl Line {
@@ -55,11 +55,11 @@ impl Line {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Rectangle {
-    top_left: (i32, i32),
-    bottom_right: (i32, i32),
-    style: LineStyle,
+    pub(crate) top_left: (i32, i32),
+    pub(crate) bottom_right: (i32, i32),
+    pub(crate) style: LineStyle,
 }
 
 impl Rectangle {
@@ -95,11 +95,11 @@ impl Rectangle {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Circle {
-    top_left: (i32, i32),
-    bottom_right: (i32, i32),
-    style: LineStyle,
+    pub(crate) top_left: (i32, i32),
+    pub(crate) bottom_right: (i32, i32),
+    pub(crate) style: LineStyle,
 }
 impl Circle {
     pub fn parse_line(line: &str) -> Option<Circle> {
@@ -130,13 +130,13 @@ impl Circle {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Arc {
-    top_left: (i32, i32),
-    bottom_right: (i32, i32),
-    end: (i32, i32),
-    start: (i32, i32),
-    style: LineStyle,
+    pub(crate) top_left: (i32, i32),
+    pub(crate) bottom_right: (i32, i32),
+    pub(crate) end: (i32, i32),
+    pub(crate) start: (i32, i32),
+    pub(crate) style: LineStyle,
 }
 
 impl Arc {
@@ -186,18 +186,13 @@ impl Arc {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TextJustification {
     Left,
     Center,
     Right,
     Top,
     Bottom,
-    VLeft,
-    VCenter,
-    VRight,
-    VTop,
-    VBottom,
     Invisible,
 }
 
@@ -209,18 +204,13 @@ impl TextJustification {
             "Right" => Some(TextJustification::Right),
             "Top" => Some(TextJustification::Top),
             "Bottom" => Some(TextJustification::Bottom),
-            "VLeft" => Some(TextJustification::VLeft),
-            "VCenter" => Some(TextJustification::VCenter),
-            "VRight" => Some(TextJustification::VRight),
-            "VTop" => Some(TextJustification::VTop),
-            "VBottom" => Some(TextJustification::VBottom),
             "Invisible" => Some(TextJustification::Invisible),
             _ => None,
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TextSize {
     SIZE0625,
     SIZE10,
@@ -246,9 +236,21 @@ impl TextSize {
             _ => None,
         }
     }
+    pub fn multiplier(&self) -> f32 {
+        match self {
+            TextSize::SIZE0625 => 0.625,
+            TextSize::SIZE10 => 1.0,
+            TextSize::SIZE15 => 1.5,
+            TextSize::SIZE20 => 2.0,
+            TextSize::SIZE25 => 2.5,
+            TextSize::SIZE35 => 3.5,
+            TextSize::SIZE50 => 5.0,
+            TextSize::SIZE70 => 7.0,
+        }
+    }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TextType {
     SpiceDirective,
     Comment,
@@ -265,13 +267,14 @@ impl TextType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Text {
-    position: (i32, i32),
-    justification: TextJustification,
-    size: TextSize,
-    text_type: Option<TextType>,
-    content: String,
+    pub(crate) position: (i32, i32),
+    pub(crate) justification: TextJustification,
+    pub(crate) vertical: bool,
+    pub(crate) size: TextSize,
+    pub(crate) text_type: Option<TextType>,
+    pub(crate) content: String,
 }
 
 impl Text {
@@ -283,7 +286,11 @@ impl Text {
         }
         let position_x = parts[1].parse::<i32>().ok()?;
         let position_y = parts[2].parse::<i32>().ok()?;
-        let justification = TextJustification::from_str(parts[3])?;
+        // If first character of justification is 'V', it's vertical
+        let vertical = parts[3].starts_with('V');
+        // Remove 'V' if present to get actual justification
+        let justification_str = if vertical { &parts[3][1..] } else { parts[3] };
+        let justification = TextJustification::from_str(justification_str)?;
         let size = TextSize::from_str(parts[4])?;
 
         let (text_type, content) = if is_symbol {
@@ -296,6 +303,7 @@ impl Text {
         Some(Text {
             position: (position_x, position_y),
             justification,
+            vertical,
             size,
             text_type,
             content: content.to_string(),
@@ -304,7 +312,7 @@ impl Text {
 }
 
 // present all shapes as a single enum
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Shape {
     Line(Line),
     Rectangle(Rectangle),

@@ -11,6 +11,7 @@ use std::path::PathBuf;
 mod file_reader;
 mod schematic;
 mod shape;
+mod svg_renderer;
 mod symbol;
 
 fn main() {

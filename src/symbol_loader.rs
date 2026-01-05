@@ -331,8 +331,6 @@ impl SymbolLoader {
 mod tests {
     use std::path::PathBuf;
 
-    use console::Term;
-
     use crate::shape::TextJustification;
 
     use super::*;
@@ -395,22 +393,18 @@ mod tests {
             available_symbols.len() > 0,
             "No available symbols found in default library paths"
         );
-        let term = Term::stdout();
         // Mark all symbols as used
         for (id, symbol_name) in available_symbols.keys().enumerate() {
-            term.clear_line().unwrap();
-            term.write_line(
-                format!(
-                    "\rLoading symbol {}/{}: {}",
-                    id + 1,
-                    available_symbols.len(),
-                    symbol_name
-                )
-                .as_str(),
-            )
-            .unwrap();
+            print!(
+                "\rLoading symbol {}/{}: {}                                                            ",
+                id + 1,
+                available_symbols.len(),
+                symbol_name
+            );
             let _ = symbol_loader.load_symbol(symbol_name);
         }
+        println!();
+        println!("All symbols loaded successfully!");
         assert_eq!(symbol_loader.used_symbols.len(), available_symbols.len());
     }
 }

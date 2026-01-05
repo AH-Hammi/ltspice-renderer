@@ -122,7 +122,61 @@ impl SvgRender for shape::Text {
 
         let mut bounding_box = BoundingBox::new();
         bounding_box.add_point_i32(self.position);
-        // TODO: Improve bounding box calculation for text
+        // Calculate the bounding box based on font size and text length
+        let text_width = font_size * self.content.len() as f32 * 0.6; // Approximate width
+        let text_height = font_size; // Approximate height
+                                     // Adjust bounding box based on justification and rotation
+        match self.justification {
+            shape::TextJustification::Left => {
+                bounding_box.add_point((
+                    self.position.0 as f32 + text_width,
+                    self.position.1 as f32 + text_height,
+                ));
+                bounding_box.add_point((
+                    self.position.0 as f32 + text_width,
+                    self.position.1 as f32 - text_height,
+                ));
+            }
+            shape::TextJustification::Center => {
+                bounding_box.add_point((
+                    self.position.0 as f32 + text_width / 2.,
+                    self.position.1 as f32 + text_height,
+                ));
+                bounding_box.add_point((
+                    self.position.0 as f32 - text_width / 2.,
+                    self.position.1 as f32,
+                ));
+            }
+            shape::TextJustification::Right => {
+                bounding_box.add_point((
+                    self.position.0 as f32 - text_width,
+                    self.position.1 as f32 + text_height,
+                ));
+            }
+            shape::TextJustification::Top => {
+                bounding_box.add_point((
+                    self.position.0 as f32 + text_width / 2.,
+                    self.position.1 as f32 + text_height,
+                ));
+                bounding_box.add_point((
+                    self.position.0 as f32 - text_width / 2.,
+                    self.position.1 as f32,
+                ));
+            }
+            shape::TextJustification::Bottom => {
+                bounding_box.add_point((
+                    self.position.0 as f32 + text_width / 2.,
+                    self.position.1 as f32,
+                ));
+                bounding_box.add_point((
+                    self.position.0 as f32 - text_width / 2.,
+                    self.position.1 as f32 - text_height,
+                ));
+            }
+            shape::TextJustification::Invisible => {
+                panic!("Invisible text should have been handled earlier")
+            }
+        }
         Some((Box::new(text), bounding_box))
     }
 }

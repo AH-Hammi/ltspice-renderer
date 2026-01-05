@@ -8,6 +8,7 @@
 
 #![allow(dead_code)]
 
+use core::panic;
 use std::{collections::HashMap, path::PathBuf};
 
 use crate::{file_reader::read_file_lines, shape::Shape};
@@ -43,7 +44,7 @@ pub struct Pin {
 }
 
 impl Pin {
-    pub fn from_asc_line(line: &str) -> Option<Self> {
+    pub fn from_line(line: &str) -> Option<Self> {
         let parts: Vec<&str> = line.split_whitespace().collect();
         if parts.len() < 3 {
             return None;
@@ -107,8 +108,8 @@ pub struct LibrarySymbol {
 
 impl LibrarySymbol {
     pub fn from_path(path: &PathBuf) -> Result<LibrarySymbol, std::io::Error> {
-        let asc_content = read_file_lines(path)?;
-        Ok(LibrarySymbol::parse(asc_content))
+        let content = read_file_lines(path)?;
+        Ok(LibrarySymbol::parse(content))
     }
     pub fn parse(lines: Vec<String>) -> LibrarySymbol {
         let mut pins: Vec<Pin> = Vec::new();
@@ -161,7 +162,7 @@ impl LibrarySymbol {
                     window_attributes.insert(parts[1].to_string(), parts[2].to_string());
                 }
                 "PIN" => {
-                    pins.push(Pin::from_asc_line(&line).expect("Failed to parse PIN line"));
+                    pins.push(Pin::from_line(&line).expect("Failed to parse PIN line"));
                 }
                 "PINATTR" => {
                     if let Some(last_pin) = pins.last_mut() {
@@ -205,18 +206,39 @@ pub struct SymbolLoader {
 
 impl SymbolLoader {
     fn default_library_paths() -> Vec<PathBuf> {
-        let user_name = std::env::var("USER").unwrap();
-        vec![
-            PathBuf::from(
-                // cspell: disable-next-line
-                format!("/home/{user}/.local/share/ltspice/drive_c/users/{user}/Documents/LTspice", user=user_name),
-            ),
-            PathBuf::from(
-                // cspell: disable-next-line
-                format!("/home/{user}/.local/share/ltspice/dosdevices/c:/users/{user}/AppData/Local/LTspice/lib/sym", 
-                user=user_name),
-            ),
-        ]
+        let user_name = whoami::username().unwrap();
+        // Determine on which OS we are running
+        if cfg!(target_os = "windows") {
+            return vec![
+                PathBuf::from(format!(
+                    "C:\\Users\\{user}\\AppData\\Local\\LTspice\\lib\\sym",
+                    user = user_name
+                )),
+                PathBuf::from(format!(
+                    "C:\\Users\\{user}\\Documents\\LTspice\\lib\\sym",
+                    user = user_name
+                )),
+            ];
+        } else if cfg!(target_os = "macos") {
+            panic!("MacOS LTspice library path not implemented yet");
+        } else if cfg!(target_os = "linux") {
+            // LTspice on Linux via Wine
+            return vec![
+                PathBuf::from(
+                    // cspell: disable-next-line
+                    format!("/home/{user}/.wine/drive_c/users/{user}/Documents/LTspice", user=user_name),
+                ),
+                PathBuf::from(
+                    // cspell: disable-next-line
+                    format!("/home/{user}/.wine/dosdevices/c:/users/{user}/AppData/Local/LTspice/lib/sym", 
+                    user=user_name),
+                ),
+            ];
+        }
+        panic!(
+            "Unsupported OS for default LTspice library paths {}",
+            std::env::consts::OS
+        );
     }
 
     pub fn new(extra_library_paths: Option<Vec<PathBuf>>) -> Self {
@@ -383,7 +405,7 @@ pub struct Symbol {
 }
 
 impl Symbol {
-    pub fn from_asc_line(line: &str, symbol_loader: &mut SymbolLoader) -> Result<Symbol, String> {
+    pub fn from_line(line: &str, symbol_loader: &mut SymbolLoader) -> Result<Symbol, String> {
         // The format is SYMBOL {Type} {PositionX} {PositionY} {Rotation} ...
         let parts = line.splitn(6, ' ').collect::<Vec<&str>>();
         if parts.len() < 5 || parts[0] != "SYMBOL" {
@@ -448,21 +470,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_symbol_from_asc_line() {
-        let line = "SYMBOL res 100 200 R0";
-        let mut symbol_loader = SymbolLoader::new(None);
-        let symbol = Symbol::from_asc_line(line, &mut symbol_loader).unwrap();
-        assert_eq!(symbol.position, (100, 200));
-        assert_eq!(symbol.rotation, SymbolRotation::R0);
-    }
-    #[test]
-    fn test_pin_from_asc_line() {
+    fn test_pin_from_line() {
         let line = "PIN 100 200 Pin1 1";
-        let pin = Pin::from_asc_line(line).unwrap();
+        let pin = Pin::from_line(line).unwrap();
         assert_eq!(pin.position, (100, 200));
         assert_eq!(pin.name, Some("Pin1".to_string()));
         assert_eq!(pin.spice_order, Some(1));
     }
+
     #[test]
     fn test_pin_add_attribute() {
         let mut pin = Pin {
@@ -475,6 +490,7 @@ mod tests {
         pin.add_attribute("PINATTR SpiceOrder 2").unwrap();
         assert_eq!(pin.spice_order, Some(2));
     }
+
     #[test]
     fn test_asy_file_from_asy_lines() {
         let lines = vec![
@@ -505,9 +521,24 @@ mod tests {
             "No available symbols found in default library paths"
         );
         // Mark all symbols as used
-        for symbol_name in available_symbols.keys() {
+        for (id, symbol_name) in available_symbols.keys().enumerate() {
+            print!(
+                "\rLoading symbol {}/{}: {}",
+                id + 1,
+                available_symbols.len(),
+                symbol_name
+            );
             let _ = symbol_loader.load_symbol(symbol_name);
         }
         assert_eq!(symbol_loader.used_symbols.len(), available_symbols.len());
+    }
+
+    #[test]
+    fn test_symbol_from_asc() {
+        let line = "SYMBOL res 100 200 R0";
+        let mut symbol_loader = SymbolLoader::new(None);
+        let symbol = Symbol::from_line(line, &mut symbol_loader).unwrap();
+        assert_eq!(symbol.position, (100, 200));
+        assert_eq!(symbol.rotation, SymbolRotation::R0);
     }
 }

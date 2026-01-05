@@ -17,6 +17,15 @@ impl LineStyle {
             _ => LineStyle::Solid,
         }
     }
+    pub fn to_svg_dasharray(&self) -> &'static str {
+        match self {
+            LineStyle::Solid => "none",
+            LineStyle::Dashed => "8,4",
+            LineStyle::Dotted => "2,4",
+            LineStyle::DashDotted => "8,4,2,4",
+            LineStyle::DashDotDotted => "8,4,2,4,2,4",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -74,22 +83,28 @@ impl Rectangle {
         if parts[1] != "Normal" {
             return Err("Not a Normal RECTANGLE line");
         }
-        let top_left_x = parts[2].parse::<i32>().map_err(|_| "Invalid top left x")?;
-        let top_left_y = parts[3].parse::<i32>().map_err(|_| "Invalid top left y")?;
-        let bottom_right_x = parts[4]
-            .parse::<i32>()
-            .map_err(|_| "Invalid bottom right x")?;
-        let bottom_right_y = parts[5]
-            .parse::<i32>()
-            .map_err(|_| "Invalid bottom right y")?;
+        let first = (
+            parts[2].parse::<i32>().map_err(|_| "Invalid top left x")?,
+            parts[3].parse::<i32>().map_err(|_| "Invalid top left y")?,
+        );
+        let second = (
+            parts[4]
+                .parse::<i32>()
+                .map_err(|_| "Invalid bottom right x")?,
+            parts[5]
+                .parse::<i32>()
+                .map_err(|_| "Invalid bottom right y")?,
+        );
+        let top_left = (first.0.min(second.0), first.1.min(second.1));
+        let bottom_right = (first.0.max(second.0), first.1.max(second.1));
         let style = if parts.len() > 6 {
             LineStyle::from_code(parts[6])
         } else {
             LineStyle::Solid
         };
         Ok(Rectangle {
-            top_left: (top_left_x, top_left_y),
-            bottom_right: (bottom_right_x, bottom_right_y),
+            top_left: top_left,
+            bottom_right: bottom_right,
             style,
         })
     }
@@ -350,9 +365,17 @@ mod tests {
     fn test_rectangle_parsing() {
         let rect_str = "RECTANGLE Normal 80 448 0 416";
         let rectangle = Rectangle::parse_line(rect_str).unwrap();
-        assert_eq!(rectangle.top_left, (80, 448));
-        assert_eq!(rectangle.bottom_right, (0, 416));
+        assert_eq!(rectangle.top_left, (0, 416));
+        assert_eq!(rectangle.bottom_right, (80, 448));
         assert_eq!(rectangle.style, LineStyle::Solid);
+    }
+    #[test]
+    fn test_rectangle_with_swapped_points_parsing() {
+        let rect_str = "RECTANGLE Normal 336 272 -16 48 2";
+        let rectangle = Rectangle::parse_line(rect_str).unwrap();
+        assert_eq!(rectangle.top_left, (-16, 48));
+        assert_eq!(rectangle.bottom_right, (336, 272));
+        assert_eq!(rectangle.style, LineStyle::Dotted);
     }
     #[test]
     fn test_circle_parsing() {

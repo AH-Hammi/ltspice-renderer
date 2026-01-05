@@ -2,6 +2,7 @@
     "rust-analyzer.server.path": "rust-analyzer",
     "nixEnvSelector.suggestion": false,
     "cSpell.words": [
+        "dasharray",
         "DATAFLAG",
         "IOPIN",
         "PINATTR",

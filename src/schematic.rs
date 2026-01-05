@@ -200,7 +200,7 @@ impl Schematic {
                     last_flag.add_io_type(&line);
                 }
                 "SYMBOL" => {
-                    let symbol = Symbol::from_asc_line(&line, &mut symbol_loader)
+                    let symbol = Symbol::from_line(&line, &mut symbol_loader)
                         .expect(&format!("Failed to parse SYMBOL line: {}", &line));
                     symbols.push(symbol);
                 }
@@ -275,9 +275,20 @@ mod tests {
 
     #[test]
     fn test_all_asc_files_from_examples() {
-        let user_name = std::env::var("USER").unwrap();
+        let user_name = whoami::username().unwrap();
         // cspell: disable-next-line
-        let examples_path = format!("/home/{user}/.local/share/ltspice/dosdevices/c:/users/{user}/AppData/Local/LTspice/examples", user=user_name);
+        let examples_path = if cfg!(target_os = "windows") {
+            // cspell: disable-next-line
+            format!(
+                "C:/Users/{user}/AppData/Local/LTspice/examples",
+                user = user_name,
+            )
+        } else {
+            // cspell: disable-next-line
+            format!("/home/{user}/.local/share/ltspice/dosdevices/c:/users/{user}/AppData/Local/LTspice/examples", 
+            user=user_name,
+        )
+        };
         // Recurse through all .asy files in the examples_path also in subdirectories
         let asc_files = glob::glob(&format!("{}/**/*.asc", examples_path))
             .unwrap()
@@ -307,9 +318,17 @@ mod tests {
 
     #[test]
     fn empty_line() {
-        // cspell: disable-next-line
-        let asc_file = Schematic::from_path(&PathBuf::from("/home/alexanderh/.local/share/ltspice/dosdevices/c:/users/alexanderh/AppData/Local/LTspice/examples/Applications/LT6372-1.asc"))
-            .expect("Failed to read ASC file");
+        let user = whoami::username().unwrap();
+        let asc_file = if cfg!(target_os = "windows") {
+            Schematic::from_path(&PathBuf::from(format!(
+                "C:/Users/{user}/AppData/Local/LTspice/examples/Applications/LT6372-1.asc"
+            )))
+            .expect("Failed to read ASC file")
+        } else {
+            // cspell: disable-next-line
+            Schematic::from_path(&PathBuf::from(format!("/home/{user}/.local/share/ltspice/dosdevices/c:/users/{user}/AppData/Local/LTspice/examples/Applications/LT6372-1.asc", user=user)))
+                .expect("Failed to read ASC file")
+        };
         asc_file.shapes.iter().for_each(|shape| {
             println!("{:?}", shape);
         });

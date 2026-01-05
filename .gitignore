@@ -7,3 +7,6 @@
 
 # Lock files
 .~lock*
+
+# SVG output files
+*.svg

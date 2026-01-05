@@ -13,6 +13,7 @@ mod schematic;
 mod shape;
 mod svg_renderer;
 mod symbol;
+mod symbol_loader;
 
 fn main() {
     // load a sample ASC file and parse it

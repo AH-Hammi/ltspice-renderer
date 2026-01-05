@@ -4,6 +4,7 @@
 use crate::schematic;
 use crate::shape;
 use crate::symbol;
+use crate::symbol_loader;
 
 use svg::Document;
 
@@ -208,7 +209,14 @@ impl SvgRender for schematic::Wire {
     }
 }
 
-impl SvgRender for symbol::LibrarySymbol {
+impl SvgRender for symbol_loader::Pin {
+    fn to_svg(&self) -> Option<(Box<dyn svg::node::Node>, BoundingBox)> {
+        // Call the implementation of the inner text element
+        todo!()
+    }
+}
+
+impl SvgRender for symbol_loader::LibrarySymbol {
     fn to_svg(&self) -> Option<(Box<dyn svg::node::Node>, BoundingBox)> {
         let mut symbol = Symbol::new().set("id", "library_symbol");
 
@@ -218,6 +226,12 @@ impl SvgRender for symbol::LibrarySymbol {
             if let Some((svg, shape_bounding_box)) = shape.to_svg() {
                 symbol = symbol.add(svg);
                 bounding_box.merge(&shape_bounding_box);
+            }
+        }
+        for pin in &self.pins {
+            if let Some((svg, pin_bounding_box)) = pin.to_svg() {
+                symbol = symbol.add(svg);
+                bounding_box.merge(&pin_bounding_box);
             }
         }
 

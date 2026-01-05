@@ -212,15 +212,15 @@ pub enum TextJustification {
 }
 
 impl TextJustification {
-    pub fn from_str(s: &str) -> Option<TextJustification> {
-        match s {
-            "Left" => Some(TextJustification::Left),
-            "Center" => Some(TextJustification::Center),
-            "Right" => Some(TextJustification::Right),
-            "Top" => Some(TextJustification::Top),
-            "Bottom" => Some(TextJustification::Bottom),
-            "Invisible" => Some(TextJustification::Invisible),
-            _ => None,
+    pub fn from_str(s: &str) -> Result<Self, &str> {
+        match s.to_lowercase().as_str() {
+            "left" => Ok(TextJustification::Left),
+            "center" => Ok(TextJustification::Center),
+            "right" => Ok(TextJustification::Right),
+            "top" => Ok(TextJustification::Top),
+            "bottom" => Ok(TextJustification::Bottom),
+            "invisible" | "none" => Ok(TextJustification::Invisible),
+            _ => Err("Invalid text justification"),
         }
     }
 }
@@ -238,17 +238,17 @@ pub enum TextSize {
 }
 
 impl TextSize {
-    pub fn from_str(s: &str) -> Option<TextSize> {
+    pub fn from_str(s: &str) -> Result<Self, &str> {
         match s {
-            "0" => Some(TextSize::SIZE0625),
-            "1" => Some(TextSize::SIZE10),
-            "2" => Some(TextSize::SIZE15),
-            "3" => Some(TextSize::SIZE20),
-            "4" => Some(TextSize::SIZE25),
-            "5" => Some(TextSize::SIZE35),
-            "6" => Some(TextSize::SIZE50),
-            "7" => Some(TextSize::SIZE70),
-            _ => None,
+            "0" => Ok(TextSize::SIZE0625),
+            "1" => Ok(TextSize::SIZE10),
+            "2" => Ok(TextSize::SIZE15),
+            "3" => Ok(TextSize::SIZE20),
+            "4" => Ok(TextSize::SIZE25),
+            "5" => Ok(TextSize::SIZE35),
+            "6" => Ok(TextSize::SIZE50),
+            "7" => Ok(TextSize::SIZE70),
+            _ => Err("Invalid text size"),
         }
     }
     pub fn multiplier(&self) -> f32 {
@@ -290,38 +290,86 @@ pub struct Text {
     pub(crate) size: TextSize,
     pub(crate) text_type: Option<TextType>,
     pub(crate) content: String,
+    pub(crate) offset: i32,
 }
 
 impl Text {
-    fn parse_line(line: &str, is_symbol: bool) -> Option<Text> {
-        // The format is TEXT {PositionX} {PositionY} {Justification} {Size} {TypeSpecifier}{Content}
-        let parts = line.splitn(6, ' ').collect::<Vec<&str>>();
-        if parts.len() < 6 || parts[0] != "TEXT" {
-            return None;
-        }
-        let position_x = parts[1].parse::<i32>().ok()?;
-        let position_y = parts[2].parse::<i32>().ok()?;
+    fn parse_position_and_justification(
+        parts: Vec<&str>,
+    ) -> Result<((i32, i32), TextJustification, bool), &str> {
+        let position = (
+            parts[0]
+                .parse::<i32>()
+                .expect("Couldn't parse first number"),
+            parts[1]
+                .parse::<i32>()
+                .expect("Couldn't parse second number"),
+        );
+
         // If first character of justification is 'V', it's vertical
-        let vertical = parts[3].starts_with('V');
+        let vertical = parts[2].starts_with('V');
         // Remove 'V' if present to get actual justification
-        let justification_str = if vertical { &parts[3][1..] } else { parts[3] };
+        let justification_str = if vertical { &parts[2][1..] } else { parts[2] };
         let justification = TextJustification::from_str(justification_str)?;
+        return Ok((position, justification, vertical));
+    }
+
+    pub fn parse_pin_line(line: &str) -> Result<Self, &str> {
+        if !line.starts_with("PIN") {
+            return Err("Line does not start with \"PIN\"");
+        }
+        let parts = line.splitn(5, ' ').collect::<Vec<&str>>();
+        if parts.len() < 5 {
+            return Err("Invalid line format");
+        }
+        let (position, justification, vertical) =
+            Text::parse_position_and_justification(parts[1..4].to_vec())?;
+        let offset = parts[4]
+            .parse::<i32>()
+            .expect("Couldn't parse second number");
+        Ok(Text {
+            position,
+            justification,
+            vertical,
+            size: TextSize::SIZE15,
+            text_type: None,
+            content: "".to_string(),
+            offset,
+        })
+    }
+
+    pub fn parse_text_line(line: &str, is_symbol: bool) -> Result<Self, &str> {
+        // The format is TEXT {PositionX} {PositionY} {Justification} {Size} {TypeSpecifier}{Content}
+        if !line.starts_with("TEXT") {
+            return Err("Line does not start with \"TEXT\"");
+        }
+        let parts = line.splitn(6, ' ').collect::<Vec<&str>>();
+        if parts.len() < 6 {
+            return Err("Invalid line format");
+        }
+        let (position, justification, vertical) =
+            Text::parse_position_and_justification(parts[1..4].to_vec())?;
+
         let size = TextSize::from_str(parts[4])?;
 
-        let (text_type, content) = if is_symbol {
+        let (text_type, content): (Option<TextType>, String) = if is_symbol {
             // For symbols, default to no type specifier
-            (None, parts[5])
+            (None, parts[5].to_string())
         } else {
             // For non-symbols, check for type specifier
-            (Some(TextType::from_str(&parts[5]).unwrap()), &parts[5][1..])
+            (
+                Some(TextType::from_str(&parts[5]).unwrap()),
+                parts[5][1..].to_string(),
+            )
         };
-        Some(Text {
-            position: (position_x, position_y),
+        Ok(Text {
+            position,
             justification,
             vertical,
             size,
             text_type,
-            content: content.to_string(),
+            content,
+            offset: 0,
         })
     }
 }
@@ -344,7 +392,7 @@ impl Shape {
             "RECTANGLE" => Rectangle::parse_line(line).ok().map(Shape::Rectangle),
             "CIRCLE" => Circle::parse_line(line).map(Shape::Circle),
             "ARC" => Arc::parse_line(line).ok().map(Shape::Arc),
-            "TEXT" => Text::parse_line(line, is_symbol).map(Shape::Text),
+            "TEXT" => Text::parse_text_line(line, is_symbol).ok().map(Shape::Text),
             _ => None,
         }
     }
@@ -411,7 +459,7 @@ mod tests {
     #[test]
     fn test_parse_text_with_comment() {
         let line = "TEXT 480 720 Center 2 ;This is a comment";
-        let text = Text::parse_line(line, false).expect("Failed to parse TEXT line");
+        let text = Text::parse_text_line(line, false).expect("Failed to parse TEXT line");
         assert_eq!(text.position, (480, 720));
         assert_eq!(text.justification, TextJustification::Center);
         assert_eq!(text.size, TextSize::SIZE15);
@@ -422,7 +470,7 @@ mod tests {
     #[test]
     fn test_parse_text_with_spice_directive() {
         let line = "TEXT 100 200 Left 3 !.MODEL NPN N";
-        let text = Text::parse_line(line, false).expect("Failed to parse TEXT line");
+        let text = Text::parse_text_line(line, false).expect("Failed to parse TEXT line");
         assert_eq!(text.position, (100, 200));
         assert_eq!(text.justification, TextJustification::Left);
         assert_eq!(text.size, TextSize::SIZE20);
@@ -433,7 +481,7 @@ mod tests {
     #[test]
     fn test_valid_symbol_text_line() {
         let line = "TEXT -64 0 Center 2 ADI";
-        let text = Text::parse_line(line, true).expect("Failed to parse TEXT line");
+        let text = Text::parse_text_line(line, true).expect("Failed to parse TEXT line");
         assert_eq!(text.position, (-64, 0));
         assert_eq!(text.justification, TextJustification::Center);
         assert_eq!(text.size, TextSize::SIZE15);
@@ -444,7 +492,7 @@ mod tests {
     #[test]
     fn test_line_break_text() {
         let line = "TEXT -688 -248 Left 2 ;Note: 0.1 μF decoupling capacitors are required \non the primary and secondary supplies. If they \nare driven from the same supply, then one set of\n 0.1 μF decoupling capacitors is sufficient.";
-        let text = Text::parse_line(line, false).expect("Failed to parse TEXT line");
+        let text = Text::parse_text_line(line, false).expect("Failed to parse TEXT line");
         assert_eq!(text.position, (-688, -248));
         assert_eq!(text.justification, TextJustification::Left);
         assert_eq!(text.size, TextSize::SIZE15);
@@ -455,7 +503,7 @@ mod tests {
     #[test]
     fn one_character_symbol_text_content() {
         let line = "TEXT -120 128 Left 3 −";
-        let text = Text::parse_line(line, true).expect("Failed to parse TEXT line");
+        let text = Text::parse_text_line(line, true).expect("Failed to parse TEXT line");
         assert_eq!(text.position, (-120, 128));
         assert_eq!(text.justification, TextJustification::Left);
         assert_eq!(text.size, TextSize::SIZE20);

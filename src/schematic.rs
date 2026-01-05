@@ -3,7 +3,8 @@
 use std::path::PathBuf;
 
 use crate::shape::Shape;
-use crate::symbol::{self, Symbol};
+use crate::symbol::Symbol;
+use crate::symbol_loader;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Wire {
@@ -92,7 +93,7 @@ pub struct Schematic {
     pub flags: Vec<Flag>,
     pub symbols: Vec<Symbol>,
     pub shapes: Vec<Shape>,
-    pub symbol_loader: symbol::SymbolLoader,
+    pub symbol_loader: symbol_loader::SymbolLoader,
 }
 
 impl Schematic {
@@ -127,7 +128,7 @@ impl Schematic {
 
     pub fn from_path_with_symbol_loader(
         path: &PathBuf,
-        symbol_loader: symbol::SymbolLoader,
+        symbol_loader: symbol_loader::SymbolLoader,
     ) -> std::io::Result<Schematic> {
         let lines = crate::file_reader::read_file_lines(path)?;
         Ok(Schematic::parse(lines, symbol_loader))
@@ -139,14 +140,14 @@ impl Schematic {
         let symbol_loader;
         // Add path of the ASC file's directory to the symbol loader
         if let Some(parent) = path.parent() {
-            symbol_loader = symbol::SymbolLoader::new(Some(vec![parent.to_path_buf()]));
+            symbol_loader = symbol_loader::SymbolLoader::new(Some(vec![parent.to_path_buf()]));
         } else {
-            symbol_loader = symbol::SymbolLoader::new(None);
+            symbol_loader = symbol_loader::SymbolLoader::new(None);
         }
         Ok(Schematic::parse(lines, symbol_loader))
     }
 
-    pub fn parse(lines: Vec<String>, mut symbol_loader: symbol::SymbolLoader) -> Schematic {
+    pub fn parse(lines: Vec<String>, mut symbol_loader: symbol_loader::SymbolLoader) -> Schematic {
         let mut wires = Vec::new();
         let mut flags = Vec::new();
         let mut symbols = Vec::new();
@@ -285,7 +286,7 @@ mod tests {
             )
         } else {
             // cspell: disable-next-line
-            format!("/home/{user}/.local/share/ltspice/dosdevices/c:/users/{user}/AppData/Local/LTspice/examples", 
+            format!("/home/{user}/.local/share/ltspice/dosdevices/c:/users/{user}/AppData/Local/LTspice/examples",
             user=user_name,
         )
         };
@@ -296,7 +297,7 @@ mod tests {
         let total_files = asc_files.len();
 
         let mut symbol_loader =
-            symbol::SymbolLoader::new(Some(vec![PathBuf::from(&examples_path)]));
+            symbol_loader::SymbolLoader::new(Some(vec![PathBuf::from(&examples_path)]));
 
         println!("Found {} ASC files in LTspice lib", total_files);
         let start_time = std::time::Instant::now();

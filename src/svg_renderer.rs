@@ -24,6 +24,7 @@ trait SvgRender {
 
 impl SvgRender for shape::Rectangle {
     fn to_svg(&self) -> Option<(Box<dyn svg::node::Node>, BoundingBox)> {
+        let stroke_width = 1.;
         let rect = Rectangle::new()
             .set("x", self.top_left.0)
             .set("y", self.top_left.1)
@@ -31,10 +32,13 @@ impl SvgRender for shape::Rectangle {
             .set("height", self.bottom_right.1 - self.top_left.1)
             .set("fill", "none")
             .set("stroke", "black")
+            .set("stroke-linecap", "round")
+            .set("stroke-width", stroke_width)
             .set("stroke-dasharray", self.style.to_svg_dasharray());
         let mut bounding_box = BoundingBox::new();
         bounding_box.add_point_i32(self.top_left);
         bounding_box.add_point_i32(self.bottom_right);
+        bounding_box.expand(stroke_width / 2.);
         Some((Box::new(rect), bounding_box))
     }
 }
@@ -67,7 +71,10 @@ impl SvgRender for shape::Line {
             .set("y1", self.start.1)
             .set("x2", self.end.0)
             .set("y2", self.end.1)
-            .set("stroke", "black");
+            .set("stroke", "black")
+            .set("stroke-width", "1")
+            .set("stroke-linecap", "round")
+            .set("stroke-dasharray", self.style.to_svg_dasharray());
 
         let mut bounding_box = BoundingBox::new();
         bounding_box.add_point_i32(self.start);
@@ -97,7 +104,8 @@ impl SvgRender for shape::Text {
         };
         let mut text = Text::new(self.content.as_str())
             .set("x", self.position.0)
-            .set("y", self.position.1 as f32 + y_offset)
+            .set("y", self.position.1)
+            .set("dy", y_offset)
             .set("font-size", format!("{}px", font_size))
             .set(
                 "text-anchor",
@@ -124,55 +132,131 @@ impl SvgRender for shape::Text {
         let mut bounding_box = BoundingBox::new();
         bounding_box.add_point_i32(self.position);
         // Calculate the bounding box based on font size and text length
-        let text_width = font_size * self.content.len() as f32 * 0.6; // Approximate width
+        let text_width = font_size * self.content.len() as f32 * 0.5; // Approximate width
         let text_height = font_size; // Approximate height
-                                     // Adjust bounding box based on justification and rotation
+
+        // Adjust bounding box based on justification and rotation
         match self.justification {
             shape::TextJustification::Left => {
-                bounding_box.add_point((
-                    self.position.0 as f32 + text_width,
-                    self.position.1 as f32 + text_height,
-                ));
-                bounding_box.add_point((
-                    self.position.0 as f32 + text_width,
-                    self.position.1 as f32 - text_height,
-                ));
+                if self.vertical {
+                    // Extend the bounding box to the right top edge of the text
+                    bounding_box.add_point((
+                        self.position.0 as f32 - text_height / 2.,
+                        self.position.1 as f32 - text_width,
+                    ));
+                    // Extend the bounding box to the bottom right edge of the text
+                    bounding_box.add_point((
+                        self.position.0 as f32 + text_height / 2.,
+                        self.position.1 as f32,
+                    ));
+                } else {
+                    // Top right of the text
+                    bounding_box.add_point((
+                        self.position.0 as f32 + text_width,
+                        self.position.1 as f32 - text_height / 2.,
+                    ));
+                    // Bottom left of the text
+                    bounding_box.add_point((
+                        self.position.0 as f32,
+                        self.position.1 as f32 + text_height / 2.,
+                    ));
+                }
             }
             shape::TextJustification::Center => {
-                bounding_box.add_point((
-                    self.position.0 as f32 + text_width / 2.,
-                    self.position.1 as f32 + text_height,
-                ));
-                bounding_box.add_point((
-                    self.position.0 as f32 - text_width / 2.,
-                    self.position.1 as f32,
-                ));
+                if self.vertical {
+                    // Top left of the text
+                    bounding_box.add_point((
+                        self.position.0 as f32 - text_height / 2.,
+                        self.position.1 as f32 - text_width / 2.,
+                    ));
+                    // Bottom right of the text
+                    bounding_box.add_point((
+                        self.position.0 as f32 + text_height / 2.,
+                        self.position.1 as f32 + text_width / 2.,
+                    ));
+                } else {
+                    // Top Left
+                    bounding_box.add_point((
+                        self.position.0 as f32 - text_width / 2.,
+                        self.position.1 as f32 - text_height / 2.,
+                    ));
+                    // Bottom Right
+                    bounding_box.add_point((
+                        self.position.0 as f32 + text_width / 2.,
+                        self.position.1 as f32 + text_height / 2.,
+                    ));
+                }
             }
             shape::TextJustification::Right => {
-                bounding_box.add_point((
-                    self.position.0 as f32 - text_width,
-                    self.position.1 as f32 + text_height,
-                ));
+                if self.vertical {
+                    // Top Left
+                    bounding_box.add_point((
+                        self.position.0 as f32 - text_height / 2.,
+                        self.position.1 as f32,
+                    ));
+                    // Bottom Right
+                    bounding_box.add_point((
+                        self.position.0 as f32 + text_height / 2.,
+                        self.position.1 as f32 + text_width,
+                    ));
+                } else {
+                    // Top Left
+                    bounding_box.add_point((
+                        self.position.0 as f32 - text_width,
+                        self.position.1 as f32 - text_height / 2.,
+                    ));
+                    // Bottom Right
+                    bounding_box.add_point((
+                        self.position.0 as f32,
+                        self.position.1 as f32 + text_height / 2.,
+                    ));
+                }
             }
             shape::TextJustification::Top => {
-                bounding_box.add_point((
-                    self.position.0 as f32 + text_width / 2.,
-                    self.position.1 as f32 + text_height,
-                ));
-                bounding_box.add_point((
-                    self.position.0 as f32 - text_width / 2.,
-                    self.position.1 as f32,
-                ));
+                if self.vertical {
+                    // Top Left
+                    bounding_box.add_point((
+                        self.position.0 as f32,
+                        self.position.1 as f32 - text_width / 2.,
+                    ));
+                    // Bottom Right
+                    bounding_box.add_point((
+                        self.position.0 as f32 + text_height,
+                        self.position.1 as f32 + text_width / 2.,
+                    ));
+                } else {
+                    // Top Left
+                    bounding_box.add_point((
+                        self.position.0 as f32 - text_width / 2.,
+                        self.position.1 as f32,
+                    ));
+                    // Bottom Right
+                    bounding_box.add_point((
+                        self.position.0 as f32 + text_width / 2.,
+                        self.position.1 as f32 + text_height,
+                    ));
+                }
             }
             shape::TextJustification::Bottom => {
-                bounding_box.add_point((
-                    self.position.0 as f32 + text_width / 2.,
-                    self.position.1 as f32,
-                ));
-                bounding_box.add_point((
-                    self.position.0 as f32 - text_width / 2.,
-                    self.position.1 as f32 - text_height,
-                ));
+                if self.vertical {
+                    bounding_box.add_point((
+                        self.position.0 as f32 - text_height,
+                        self.position.1 as f32 - text_width / 2.,
+                    ));
+                    bounding_box.add_point((
+                        self.position.0 as f32,
+                        self.position.1 as f32 + text_width / 2.,
+                    ));
+                } else {
+                    bounding_box.add_point((
+                        self.position.0 as f32 - text_width / 2.,
+                        self.position.1 as f32 - text_height,
+                    ));
+                    bounding_box.add_point((
+                        self.position.0 as f32 + text_width / 2.,
+                        self.position.1 as f32,
+                    ));
+                }
             }
             shape::TextJustification::Invisible => {
                 panic!("Invisible text should have been handled earlier")
@@ -201,7 +285,9 @@ impl SvgRender for schematic::Wire {
             .set("y1", self.start.1)
             .set("x2", self.end.0)
             .set("y2", self.end.1)
-            .set("stroke", "black");
+            .set("stroke", "black")
+            .set("stroke-width", "2")
+            .set("stroke-linecap", "round");
         let mut bounding_box = BoundingBox::new();
         bounding_box.add_point_i32(self.start);
         bounding_box.add_point_i32(self.end);
@@ -294,10 +380,19 @@ impl BoundingBox {
         self.add_point(other.top_left);
         self.add_point(other.bottom_right);
     }
+
+    fn expand(&mut self, amount: f32) {
+        self.top_left.0 -= amount;
+        self.top_left.1 -= amount;
+        self.bottom_right.0 += amount;
+        self.bottom_right.1 += amount;
+    }
 }
 
 pub fn generate_svg(schematic: &schematic::Schematic) -> SVG {
-    let mut document = Document::new().set("font-family", "Arial, sans-serif");
+    let mut document = Document::new()
+        .set("font-family", "Arial, sans-serif")
+        .set("font-weight", "bold");
 
     let mut schematic_bounding_box = BoundingBox::new();
 

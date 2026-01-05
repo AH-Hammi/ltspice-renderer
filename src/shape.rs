@@ -20,10 +20,10 @@ impl LineStyle {
     pub fn to_svg_dasharray(&self) -> &'static str {
         match self {
             LineStyle::Solid => "none",
-            LineStyle::Dashed => "8,4",
-            LineStyle::Dotted => "2,4",
-            LineStyle::DashDotted => "8,4,2,4",
-            LineStyle::DashDotDotted => "8,4,2,4,2,4",
+            LineStyle::Dashed => "4,2",
+            LineStyle::Dotted => "1,2",
+            LineStyle::DashDotted => "4,2,1,2",
+            LineStyle::DashDotDotted => "4,2,1,2,1,2",
         }
     }
 }

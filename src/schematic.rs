@@ -285,10 +285,19 @@ mod tests {
                 user = user_name,
             )
         } else {
+            let user_name = std::env::var("USER").unwrap();
+            // LTspice on Linux via Wine
+            let mut local_share = format!("/home/{user}/.local/share", user = user_name);
+            let wineprefixes = PathBuf::from(local_share.clone()).join("wineprefixes");
+            if wineprefixes.exists() {
+                local_share = format!("{}/wineprefixes", local_share);
+            }
             // cspell: disable-next-line
-            format!("/home/{user}/.local/share/ltspice/dosdevices/c:/users/{user}/AppData/Local/LTspice/examples",
-            user=user_name,
-        )
+            format!(
+                "{local_share}/ltspice/dosdevices/c:/users/{user}/AppData/Local/LTspice/examples",
+                user = user_name,
+                local_share = local_share,
+            )
         };
         // Recurse through all .asy files in the examples_path also in subdirectories
         let asc_files = glob::glob(&format!("{}/**/*.asc", examples_path))
@@ -315,23 +324,5 @@ mod tests {
         let duration = start_time.elapsed();
         println!();
         println!("All ASC files parsed successfully in {:?}", duration);
-    }
-
-    #[test]
-    fn empty_line() {
-        let user = whoami::username().unwrap();
-        let asc_file = if cfg!(target_os = "windows") {
-            Schematic::from_path(&PathBuf::from(format!(
-                "C:/Users/{user}/AppData/Local/LTspice/examples/Applications/LT6372-1.asc"
-            )))
-            .expect("Failed to read ASC file")
-        } else {
-            // cspell: disable-next-line
-            Schematic::from_path(&PathBuf::from(format!("/home/{user}/.local/share/ltspice/dosdevices/c:/users/{user}/AppData/Local/LTspice/examples/Applications/LT6372-1.asc", user=user)))
-                .expect("Failed to read ASC file")
-        };
-        asc_file.shapes.iter().for_each(|shape| {
-            println!("{:?}", shape);
-        });
     }
 }

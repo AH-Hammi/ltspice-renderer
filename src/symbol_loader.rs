@@ -198,15 +198,21 @@ impl SymbolLoader {
         } else if cfg!(target_os = "linux") {
             let user_name = std::env::var("USER").unwrap();
             // LTspice on Linux via Wine
+            let mut local_share =
+                PathBuf::from(format!("/home/{user}/.local/share", user = user_name));
+            let wineprefixes = local_share.join("wineprefixes");
+            if wineprefixes.exists() {
+                local_share = wineprefixes;
+            }
             return vec![
-                PathBuf::from(
-                    format!("/home/{user}/.local/share/ltspice/drive_c/users/{user}/Documents/LTspice", user=user_name),
-                ),
-                PathBuf::from(
-                    // cspell: disable-next-line
-                    format!("/home/{user}/.local/share/ltspice/dosdevices/c:/users/{user}/AppData/Local/LTspice/lib/sym",
-                    user=user_name),
-                ),
+                local_share.join(format!(
+                    "ltspice/drive_c/users/{user}/Documents/LTspice/lib/sym",
+                    user = user_name
+                )),
+                local_share.join(format!(
+                    "ltspice/dosdevices/c:/users/{user}/AppData/Local/LTspice/lib/sym",
+                    user = user_name
+                )),
             ];
         }
         panic!(

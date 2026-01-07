@@ -8,6 +8,7 @@
 
 use std::path::PathBuf;
 
+mod bounding_box;
 mod file_reader;
 mod schematic;
 mod shape;

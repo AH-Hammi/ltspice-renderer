@@ -175,7 +175,7 @@ impl LibrarySymbol {
 pub struct SymbolLoader {
     available_symbols: HashMap<String, PathBuf>,
     short_name_to_id: HashMap<String, String>,
-    used_symbols: HashMap<String, LibrarySymbol>,
+    pub(crate) used_symbols: HashMap<String, LibrarySymbol>,
 }
 
 impl SymbolLoader {

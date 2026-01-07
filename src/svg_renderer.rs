@@ -1,6 +1,9 @@
 //! Allows to create SVG renderings of schematics and symbols.
 #![allow(dead_code)]
 
+use std::collections::HashMap;
+
+use crate::bounding_box::BoundingBox;
 use crate::schematic;
 use crate::shape;
 use crate::symbol;
@@ -14,6 +17,7 @@ use svg::node::element::Line;
 use svg::node::element::Rectangle;
 use svg::node::element::Symbol;
 use svg::node::element::Text;
+use svg::node::element::Use;
 use svg::node::element::SVG;
 
 use crate::shape::Shape;
@@ -102,9 +106,22 @@ impl SvgRender for shape::Text {
                 panic!("Invisible text should have been handled earlier")
             }
         };
+
+        let x_offset = match self.justification {
+            shape::TextJustification::Left => self.offset,
+            shape::TextJustification::Center
+            | shape::TextJustification::Top
+            | shape::TextJustification::Bottom => self.offset,
+            shape::TextJustification::Right => -self.offset,
+            shape::TextJustification::Invisible => {
+                panic!("Invisible text should have been handled earlier")
+            }
+        };
+
         let mut text = Text::new(self.content.as_str())
             .set("x", self.position.0)
             .set("y", self.position.1)
+            .set("dx", x_offset)
             .set("dy", y_offset)
             .set("font-size", format!("{}px", font_size))
             .set(
@@ -132,7 +149,7 @@ impl SvgRender for shape::Text {
         let mut bounding_box = BoundingBox::new();
         bounding_box.add_point_i32(self.position);
         // Calculate the bounding box based on font size and text length
-        let text_width = font_size * self.content.len() as f32 * 0.5; // Approximate width
+        let text_width = font_size * self.content.len() as f32 * 0.5 + self.offset as f32; // Approximate width
         let text_height = font_size; // Approximate height
 
         // Adjust bounding box based on justification and rotation
@@ -298,13 +315,13 @@ impl SvgRender for schematic::Wire {
 impl SvgRender for symbol_loader::Pin {
     fn to_svg(&self) -> Option<(Box<dyn svg::node::Node>, BoundingBox)> {
         // Call the implementation of the inner text element
-        todo!()
+        self.text.to_svg()
     }
 }
 
-impl SvgRender for symbol_loader::LibrarySymbol {
-    fn to_svg(&self) -> Option<(Box<dyn svg::node::Node>, BoundingBox)> {
-        let mut symbol = Symbol::new().set("id", "library_symbol");
+impl symbol_loader::LibrarySymbol {
+    fn to_svg(&self, id: &str) -> Option<(Box<dyn svg::node::Node>, BoundingBox)> {
+        let mut symbol = Symbol::new().set("id", id);
 
         let mut bounding_box = BoundingBox::new();
 
@@ -320,72 +337,62 @@ impl SvgRender for symbol_loader::LibrarySymbol {
                 bounding_box.merge(&pin_bounding_box);
             }
         }
+        symbol = symbol
+            .set(
+                "width",
+                bounding_box.bottom_right.0 - bounding_box.top_left.0,
+            )
+            .set(
+                "height",
+                bounding_box.bottom_right.1 - bounding_box.top_left.1,
+            )
+            .set(
+                "viewBox",
+                format!(
+                    "{} {} {} {}",
+                    bounding_box.top_left.0,
+                    bounding_box.top_left.1,
+                    bounding_box.bottom_right.0 - bounding_box.top_left.0,
+                    bounding_box.bottom_right.1 - bounding_box.top_left.1
+                ),
+            );
 
         Some((Box::new(symbol), bounding_box))
     }
 }
 
-impl SvgRender for symbol::Symbol {
-    fn to_svg(&self) -> Option<(Box<dyn svg::node::Node>, BoundingBox)> {
-        let mut group = Group::new().set("id", "symbol");
+impl symbol::Symbol {
+    fn to_svg(
+        &self,
+        library_bounding_box: BoundingBox,
+    ) -> Option<(Box<dyn svg::node::Node>, BoundingBox)> {
+        let mut bounding_box = library_bounding_box;
+        let use_symbol = Use::new()
+            .set("href", format!("#{}", self.symbol_id.as_str()))
+            .set("x", self.position.0)
+            .set("y", self.position.1)
+            .set("transform", format!("rotate({})", self.rotation));
+        // Add windowing attributes
 
-        group = group.add(
-            svg::node::element::Use::new()
-                .set("href", self.symbol_id.as_str())
-                .set("x", self.position.0)
-                .set("y", self.position.1)
-                .set("transform", format!("rotate({})", self.rotation)),
-        );
-        let mut bounding_box = BoundingBox::new();
-        bounding_box.add_point_i32(self.position);
+        bounding_box.translate((self.position.0 as f32, self.position.1 as f32));
 
-        Some((Box::new(group), bounding_box))
+        Some((Box::new(use_symbol), bounding_box))
     }
 }
 
-struct BoundingBox {
-    top_left: (f32, f32),
-    bottom_right: (f32, f32),
-}
+impl symbol_loader::SymbolLoader {
+    fn to_svg(&self) -> Option<(Box<dyn svg::node::Node>, HashMap<String, BoundingBox>)> {
+        let mut group = Group::new();
+        let mut bounding_box_per_id: HashMap<String, BoundingBox> = HashMap::new();
 
-impl BoundingBox {
-    fn new() -> Self {
-        BoundingBox {
-            top_left: (f32::MAX, f32::MAX),
-            bottom_right: (f32::MIN, f32::MIN),
+        for (id, library_symbol) in self.used_symbols.iter() {
+            if let Some((svg, symbol_bounding_box)) = library_symbol.to_svg(id) {
+                group = group.add(svg);
+                bounding_box_per_id.insert(id.clone(), symbol_bounding_box);
+            }
         }
-    }
 
-    fn add_point(&mut self, point: (f32, f32)) {
-        if point.0 < self.top_left.0 {
-            self.top_left.0 = point.0;
-        }
-        if point.1 < self.top_left.1 {
-            self.top_left.1 = point.1;
-        }
-        if point.0 > self.bottom_right.0 {
-            self.bottom_right.0 = point.0;
-        }
-        if point.1 > self.bottom_right.1 {
-            self.bottom_right.1 = point.1;
-        }
-    }
-
-    fn add_point_i32(&mut self, point: (i32, i32)) {
-        let point_f32 = (point.0 as f32, point.1 as f32);
-        self.add_point(point_f32);
-    }
-
-    fn merge(&mut self, other: &BoundingBox) {
-        self.add_point(other.top_left);
-        self.add_point(other.bottom_right);
-    }
-
-    fn expand(&mut self, amount: f32) {
-        self.top_left.0 -= amount;
-        self.top_left.1 -= amount;
-        self.bottom_right.0 += amount;
-        self.bottom_right.1 += amount;
+        Some((Box::new(group), bounding_box_per_id))
     }
 }
 
@@ -410,10 +417,24 @@ pub fn generate_svg(schematic: &schematic::Schematic) -> SVG {
         }
     }
 
+    let mut bounding_boxes_for_symbols: Option<HashMap<String, BoundingBox>> = None;
+    // Render all used symbols
+    if let Some((svg, local_bounding_box_per_id)) = schematic.symbol_loader.to_svg() {
+        document = document.add(svg);
+        bounding_boxes_for_symbols = Some(local_bounding_box_per_id);
+    }
+
+    let bounding_boxes_for_symbols =
+        bounding_boxes_for_symbols.expect("Bounding boxes for symbols should be available");
+
     for symbol_instance in &schematic.symbols {
-        if let Some((svg, local_bounding_box)) = symbol_instance.to_svg() {
+        let bounding_box_for_symbol = bounding_boxes_for_symbols
+            .get(&symbol_instance.symbol_id)
+            .cloned()
+            .expect("Bounding box for symbol instance should be available");
+        if let Some((svg, bounding_box)) = symbol_instance.to_svg(bounding_box_for_symbol) {
             document = document.add(svg);
-            schematic_bounding_box.merge(&local_bounding_box);
+            schematic_bounding_box.merge(&bounding_box);
         }
     }
 

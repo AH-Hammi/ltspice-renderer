@@ -4,9 +4,11 @@
 # Devenv files and folders
 .devenv*
 .direnv
+.pre-commit-config.yaml
 
 # Lock files
 .~lock*
 
-# SVG output files
+# output files
 *.svg
+*.txt

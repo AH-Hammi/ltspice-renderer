@@ -1,0 +1,4 @@
+# LTspice temporary files
+*.log
+*.net
+*.raw

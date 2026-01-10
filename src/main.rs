@@ -1,11 +1,3 @@
-#![warn(
-    clippy::all,
-    clippy::restriction,
-    clippy::pedantic,
-    clippy::nursery,
-    clippy::cargo
-)]
-
 use std::path::PathBuf;
 
 mod bounding_box;

@@ -1,9 +1,9 @@
 //! Read a file and return the lines as a vector of strings
 //! Removes any null bytes and carriage returns from the lines
 
-use std::path::PathBuf;
+use std::path::Path;
 
-fn read_utf16_file(path: &PathBuf) -> std::io::Result<Vec<String>> {
+fn read_utf16_file(path: &Path) -> std::io::Result<Vec<String>> {
     let content = std::fs::read(path);
     if content.is_err() {
         return Err(content.err().unwrap());
@@ -22,7 +22,7 @@ fn read_utf16_file(path: &PathBuf) -> std::io::Result<Vec<String>> {
         .collect())
 }
 
-fn read_utf8_file(path: &PathBuf) -> std::io::Result<Vec<String>> {
+fn read_utf8_file(path: &Path) -> std::io::Result<Vec<String>> {
     let content = std::fs::read_to_string(path)?;
     let lines = content.lines();
     Ok(lines
@@ -30,7 +30,7 @@ fn read_utf8_file(path: &PathBuf) -> std::io::Result<Vec<String>> {
         .collect())
 }
 
-fn read_windows1252_file(path: &PathBuf) -> std::io::Result<Vec<String>> {
+fn read_windows1252_file(path: &Path) -> std::io::Result<Vec<String>> {
     let content = std::fs::read(path);
     if content.is_err() {
         return Err(content.err().unwrap());
@@ -58,7 +58,7 @@ fn check_null_characters(lines: &Vec<String>) -> bool {
     false
 }
 
-pub fn read_file_lines(path: &PathBuf) -> std::io::Result<Vec<String>> {
+pub fn read_file_lines(path: &Path) -> std::io::Result<Vec<String>> {
     // Check if a file exists at the given path
     if !std::path::Path::new(path).exists() {
         return Err(std::io::Error::new(

@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use std::path::PathBuf;
+use std::path::Path;
 
 use crate::shape::Shape;
 use crate::symbol::Symbol;
@@ -262,7 +262,7 @@ impl Schematic {
         }
     }
 
-    pub fn from_path(path: &PathBuf) -> std::io::Result<Schematic> {
+    pub fn from_path(path: &Path) -> std::io::Result<Schematic> {
         let lines = crate::file_reader::read_file_lines(path)?;
         Ok(Schematic::parse(lines))
     }
@@ -301,7 +301,7 @@ mod tests {
 
     #[test]
     fn test_basic_asc_example() {
-        let document = Schematic::from_path(&PathBuf::from("test_files/text_sample.asc"))
+        let document = Schematic::from_path(Path::new("test_files/text_sample.asc"))
             .expect("Failed to read ASC file");
         assert_eq!(document.wires.len(), 0);
         assert_eq!(document.flags.len(), 0);
@@ -311,7 +311,7 @@ mod tests {
 
     #[test]
     fn test_asc_example() {
-        let document = Schematic::from_path(&PathBuf::from("test_files/complex_sample.asc"))
+        let document = Schematic::from_path(Path::new("test_files/complex_sample.asc"))
             .expect("Failed to read ASC file");
         assert_eq!(document.wires.len(), 10);
         assert_eq!(document.flags.len(), 11);
@@ -332,7 +332,7 @@ mod tests {
             let user_name = std::env::var("USER").unwrap();
             // LTspice on Linux via Wine
             let mut local_share = format!("/home/{user}/.local/share", user = user_name);
-            let wineprefixes = PathBuf::from(local_share.clone()).join("wineprefixes");
+            let wineprefixes = Path::new(&local_share).join("wineprefixes");
             if wineprefixes.exists() {
                 local_share = format!("{}/wineprefixes", local_share);
             }

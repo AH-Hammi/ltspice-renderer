@@ -7,6 +7,7 @@ use std::path::Path;
 
 use crate::bounding_box::BoundingBox;
 use crate::schematic;
+use crate::schematic::Schematic;
 use crate::shape;
 use crate::symbol;
 use crate::symbol_loader;
@@ -398,10 +399,8 @@ impl symbol_loader::SymbolLoader {
     }
 }
 
-pub fn generate_svg(
-    schematic: &mut schematic::Schematic,
-    schematic_path: &Path,
-) -> Result<SVG, Error> {
+pub fn generate_svg_from_schematic(schematic_path: &Path) -> Result<SVG, Error> {
+    let mut schematic = Schematic::from_path(schematic_path).unwrap();
     let mut document = Document::new()
         .set("font-family", "Arial, sans-serif")
         .set("font-weight", "bold");
@@ -423,7 +422,10 @@ pub fn generate_svg(
     }
 
     // Add all symbols to used
-    let mut symbol_loader = symbol_loader::SymbolLoader::new(Some(vec![schematic_path.to_owned()]));
+    let mut symbol_loader = symbol_loader::SymbolLoader::new(Some(vec![schematic_path
+        .parent()
+        .unwrap()
+        .to_path_buf()]));
     schematic.make_symbols_absolute(&mut symbol_loader)?;
 
     let mut bounding_boxes_for_symbols: Option<HashMap<String, BoundingBox>> = None;
@@ -479,9 +481,6 @@ pub fn generate_svg(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::schematic::Schematic;
-    use std::path::PathBuf;
-    use std::str::FromStr;
 
     #[test]
     fn bounding_box_merge() {
@@ -501,30 +500,27 @@ mod tests {
 
     #[test]
     fn shape_sample() {
-        let path = PathBuf::from_str("test_files/shape_sample.asc").unwrap();
-        let mut schematic = Schematic::from_path(&path).unwrap();
+        let path = Path::new("test_files/shape_sample.asc");
 
-        let svg_document = generate_svg(&mut schematic, &path);
+        let svg_document = generate_svg_from_schematic(&path);
 
         svg::save("shape_sample.svg", &svg_document.unwrap()).unwrap();
     }
 
     #[test]
     fn text_sample() {
-        let path = PathBuf::from_str("test_files/text_sample.asc").unwrap();
-        let mut schematic = Schematic::from_path(&path).unwrap();
+        let path = Path::new("test_files/text_sample.asc");
 
-        let svg_document = generate_svg(&mut schematic, &path);
+        let svg_document = generate_svg_from_schematic(&path);
 
         svg::save("text_sample.svg", &svg_document.unwrap()).unwrap();
     }
 
     #[test]
     fn complex_sample() {
-        let path = PathBuf::from_str("test_files/complex_sample.asc").unwrap();
-        let mut schematic = Schematic::from_path(&path).unwrap();
+        let path = Path::new("test_files/complex_sample.asc");
 
-        let svg_document = generate_svg(&mut schematic, &path);
+        let svg_document = generate_svg_from_schematic(&path);
 
         svg::save("complex_sample.svg", &svg_document.unwrap()).unwrap();
     }

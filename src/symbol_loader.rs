@@ -222,7 +222,7 @@ impl SymbolLoader {
     }
 
     pub fn new(extra_library_paths: Option<Vec<PathBuf>>) -> Self {
-        let mut library_paths = extra_library_paths.unwrap_or_else(Vec::new);
+        let mut library_paths = extra_library_paths.unwrap_or_default();
         library_paths.extend(Self::default_library_paths());
 
         let (available_symbols, name_to_full_name) = Self::load_available_symbols(library_paths);
@@ -284,7 +284,7 @@ impl SymbolLoader {
         if self.available_symbols.contains_key(&symbol_name) {
             return Ok(symbol_name);
         }
-        let symbol_name = symbol_name.split('/').last().unwrap();
+        let symbol_name = symbol_name.split('/').next_back().unwrap();
         if self.short_name_to_id.contains_key(symbol_name) {
             return Ok(self.short_name_to_id[symbol_name].clone());
         }
@@ -310,10 +310,10 @@ impl SymbolLoader {
         )
         .unwrap();
         std::eprintln!("Name to ID map written to name_to_id_map.txt for debugging.");
-        return Err(std::io::Error::new(
+        Err(std::io::Error::new(
             std::io::ErrorKind::NotFound,
             format!("Symbol not found: {}", symbol_name),
-        ));
+        ))
     }
 
     /// Mark a symbol as being used. This will add the symbol to the used_symbols list
@@ -396,7 +396,7 @@ mod tests {
         let mut symbol_loader = SymbolLoader::new(None);
         let available_symbols = symbol_loader.available_symbols.clone();
         assert!(
-            available_symbols.len() > 0,
+            !available_symbols.is_empty(),
             "No available symbols found in default library paths"
         );
         // Mark all symbols as used

@@ -2,6 +2,8 @@
 #![allow(dead_code)]
 
 use std::collections::HashMap;
+use std::io::Error;
+use std::path::Path;
 
 use crate::bounding_box::BoundingBox;
 use crate::schematic;
@@ -371,7 +373,7 @@ impl symbol::Symbol {
             .set("href", format!("#{}", self.symbol_id.as_str()))
             .set("x", self.position.0)
             .set("y", self.position.1)
-            .set("transform", format!("rotate({})", self.rotation));
+            .set("transform", format!("rotate({})", self.rotation.as_int()));
         // Add windowing attributes
 
         bounding_box.translate((self.position.0 as f32, self.position.1 as f32));
@@ -396,7 +398,10 @@ impl symbol_loader::SymbolLoader {
     }
 }
 
-pub fn generate_svg(schematic: &schematic::Schematic) -> SVG {
+pub fn generate_svg(
+    schematic: &mut schematic::Schematic,
+    schematic_path: &Path,
+) -> Result<SVG, Error> {
     let mut document = Document::new()
         .set("font-family", "Arial, sans-serif")
         .set("font-weight", "bold");
@@ -417,9 +422,13 @@ pub fn generate_svg(schematic: &schematic::Schematic) -> SVG {
         }
     }
 
+    // Add all symbols to used
+    let mut symbol_loader = symbol_loader::SymbolLoader::new(Some(vec![schematic_path.to_owned()]));
+    schematic.make_symbols_absolute(&mut symbol_loader)?;
+
     let mut bounding_boxes_for_symbols: Option<HashMap<String, BoundingBox>> = None;
     // Render all used symbols
-    if let Some((svg, local_bounding_box_per_id)) = schematic.symbol_loader.to_svg() {
+    if let Some((svg, local_bounding_box_per_id)) = symbol_loader.to_svg() {
         document = document.add(svg);
         bounding_boxes_for_symbols = Some(local_bounding_box_per_id);
     }
@@ -446,7 +455,7 @@ pub fn generate_svg(schematic: &schematic::Schematic) -> SVG {
         schematic_bounding_box.bottom_right.1
     );
 
-    document
+    Ok(document
         .set(
             "width",
             schematic_bounding_box.bottom_right.0 - schematic_bounding_box.top_left.0,
@@ -464,7 +473,7 @@ pub fn generate_svg(schematic: &schematic::Schematic) -> SVG {
                 schematic_bounding_box.bottom_right.0 - schematic_bounding_box.top_left.0,
                 schematic_bounding_box.bottom_right.1 - schematic_bounding_box.top_left.1
             ),
-        )
+        ))
 }
 
 #[cfg(test)]
@@ -492,34 +501,31 @@ mod tests {
 
     #[test]
     fn shape_sample() {
-        let schematic =
-            Schematic::from_path(&PathBuf::from_str("test_files/shape_sample.asc").unwrap())
-                .unwrap();
+        let path = PathBuf::from_str("test_files/shape_sample.asc").unwrap();
+        let mut schematic = Schematic::from_path(&path).unwrap();
 
-        let svg_document = generate_svg(&schematic);
+        let svg_document = generate_svg(&mut schematic, &path);
 
-        svg::save("shape_sample.svg", &svg_document).unwrap();
+        svg::save("shape_sample.svg", &svg_document.unwrap()).unwrap();
     }
 
     #[test]
     fn text_sample() {
-        let schematic =
-            Schematic::from_path(&PathBuf::from_str("test_files/text_sample.asc").unwrap())
-                .unwrap();
+        let path = PathBuf::from_str("test_files/text_sample.asc").unwrap();
+        let mut schematic = Schematic::from_path(&path).unwrap();
 
-        let svg_document = generate_svg(&schematic);
+        let svg_document = generate_svg(&mut schematic, &path);
 
-        svg::save("text_sample.svg", &svg_document).unwrap();
+        svg::save("text_sample.svg", &svg_document.unwrap()).unwrap();
     }
 
     #[test]
     fn complex_sample() {
-        let schematic =
-            Schematic::from_path(&PathBuf::from_str("test_files/complex_sample.asc").unwrap())
-                .unwrap();
+        let path = PathBuf::from_str("test_files/complex_sample.asc").unwrap();
+        let mut schematic = Schematic::from_path(&path).unwrap();
 
-        let svg_document = generate_svg(&schematic);
+        let svg_document = generate_svg(&mut schematic, &path);
 
-        svg::save("complex_sample.svg", &svg_document).unwrap();
+        svg::save("complex_sample.svg", &svg_document.unwrap()).unwrap();
     }
 }

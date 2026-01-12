@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use crate::shape::Shape;
 use crate::symbol::Symbol;
-use crate::symbol_loader;
+use crate::symbol_loader::SymbolLoader;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Wire {
@@ -48,7 +48,7 @@ impl FlagType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct Flag {
     pub position: (i32, i32),
     pub name: String,
@@ -86,6 +86,50 @@ impl Flag {
     }
 }
 
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
+pub struct Dataflag {
+    pub position: (i32, i32),
+    pub directive: String,
+}
+
+impl Dataflag {
+    pub fn from_line(line: &str) -> Option<Self> {
+        let parts = line.splitn(4, ' ').collect::<Vec<&str>>();
+        if parts.len() < 4 || parts[0] != "DATAFLAG" {
+            return None;
+        }
+        let position = (parts[1].parse::<i32>().ok()?, parts[2].parse::<i32>().ok()?);
+        let directive = parts[3].to_string();
+        // Remove the " marks
+        let directive = directive.trim_matches('"').to_string();
+        Some(Self {
+            position,
+            directive,
+        })
+    }
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
+pub struct Bustap {
+    pub first_position: (i32, i32),
+    pub second_position: (i32, i32),
+}
+
+impl Bustap {
+    pub fn from_line(line: &str) -> Option<Self> {
+        let parts = line.splitn(5, ' ').collect::<Vec<&str>>();
+        if parts.len() < 5 || parts[0] != "BUSTAP" {
+            return None;
+        }
+        let first_position = (parts[1].parse::<i32>().ok()?, parts[2].parse::<i32>().ok()?);
+        let second_position = (parts[3].parse::<i32>().ok()?, parts[4].parse::<i32>().ok()?);
+        Some(Self {
+            first_position,
+            second_position,
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Schematic {
     pub sheet_size: (i32, i32),
@@ -93,7 +137,6 @@ pub struct Schematic {
     pub flags: Vec<Flag>,
     pub symbols: Vec<Symbol>,
     pub shapes: Vec<Shape>,
-    pub symbol_loader: symbol_loader::SymbolLoader,
 }
 
 impl Schematic {
@@ -126,32 +169,13 @@ impl Schematic {
         }
     }
 
-    pub fn from_path_with_symbol_loader(
-        path: &PathBuf,
-        symbol_loader: symbol_loader::SymbolLoader,
-    ) -> std::io::Result<Schematic> {
-        let lines = crate::file_reader::read_file_lines(path)?;
-        Ok(Schematic::parse(lines, symbol_loader))
-    }
-
-    pub fn from_path(path: &PathBuf) -> std::io::Result<Schematic> {
-        let lines = crate::file_reader::read_file_lines(path)?;
-        // Create a symbol loader
-        let symbol_loader;
-        // Add path of the ASC file's directory to the symbol loader
-        if let Some(parent) = path.parent() {
-            symbol_loader = symbol_loader::SymbolLoader::new(Some(vec![parent.to_path_buf()]));
-        } else {
-            symbol_loader = symbol_loader::SymbolLoader::new(None);
-        }
-        Ok(Schematic::parse(lines, symbol_loader))
-    }
-
-    pub fn parse(lines: Vec<String>, mut symbol_loader: symbol_loader::SymbolLoader) -> Schematic {
+    pub fn parse(lines: Vec<String>) -> Schematic {
         let mut wires = Vec::new();
         let mut flags = Vec::new();
         let mut symbols = Vec::new();
         let mut shapes = Vec::new();
+        let mut dataflags = Vec::new();
+        let mut bustaps = Vec::new();
 
         let mut file_lines = lines.into_iter();
 
@@ -179,38 +203,44 @@ impl Schematic {
                 "Version" => {
                     println!("Ignoring redundant Version line: {}", line);
                 }
-                "DATAFLAG" => {
-                    println!("Ignoring DATAFLAG line: {}", line);
-                }
                 "WIRE" => {
                     wires.push(
                         Wire::from_asc_line(&line)
-                            .expect(&format!("Failed to parse WIRE line: {}", line)),
+                            .unwrap_or_else(|| panic!("Failed to parse WIRE line: {}", line)),
                     );
                 }
                 "FLAG" => {
                     flags.push(
                         Flag::from_asc_line(&line)
-                            .expect(&format!("Failed to parse FLAG line: {}", line)),
+                            .unwrap_or_else(|| panic!("Failed to parse FLAG line: {}", line)),
                     );
                 }
                 "IOPIN" => {
                     let last_flag = flags
                         .last_mut()
-                        .expect(&format!("IOPIN line without preceding FLAG: {}", line));
+                        .unwrap_or_else(|| panic!("IOPIN line without preceding FLAG: {}", line));
                     last_flag.add_io_type(&line);
                 }
                 "SYMBOL" => {
-                    let symbol = Symbol::from_line(&line, &mut symbol_loader)
-                        .expect(&format!("Failed to parse SYMBOL line: {}", &line));
+                    let symbol = Symbol::from_line(&line)
+                        .unwrap_or_else(|_| panic!("Failed to parse SYMBOL line: {}", &line));
                     symbols.push(symbol);
                 }
                 "WINDOW" | "SYMATTR" => {
-                    let last_symbol = symbols.last_mut().expect(&format!(
-                        "{} line without preceding SYMBOL: {}",
-                        first_word, line
-                    ));
+                    let last_symbol = symbols.last_mut().unwrap_or_else(|| {
+                        panic!("{} line without preceding SYMBOL: {}", first_word, line)
+                    });
                     last_symbol.add_attribute(&line);
+                }
+                "DATAFLAG" => {
+                    let dataflag = Dataflag::from_line(&line)
+                        .unwrap_or_else(|| panic!("Failed to parse DATAFLAG line: {}", &line));
+                    dataflags.push(dataflag);
+                }
+                "BUSTAP" => {
+                    let bustap = Bustap::from_line(&line)
+                        .unwrap_or_else(|| panic!("Failed to parse BUSTAP line: {}", &line));
+                    bustaps.push(bustap);
                 }
                 _ => {
                     // Try to parse as shape
@@ -229,8 +259,22 @@ impl Schematic {
             flags,
             symbols,
             shapes,
-            symbol_loader: symbol_loader,
         }
+    }
+
+    pub fn from_path(path: &PathBuf) -> std::io::Result<Schematic> {
+        let lines = crate::file_reader::read_file_lines(path)?;
+        Ok(Schematic::parse(lines))
+    }
+
+    pub fn make_symbols_absolute(
+        &mut self,
+        symbol_loader: &mut SymbolLoader,
+    ) -> Result<(), std::io::Error> {
+        for symbol in &mut self.symbols {
+            symbol.make_absolute(symbol_loader)?;
+        }
+        Ok(())
     }
 }
 
@@ -269,8 +313,8 @@ mod tests {
     fn test_asc_example() {
         let document = Schematic::from_path(&PathBuf::from("test_files/complex_sample.asc"))
             .expect("Failed to read ASC file");
-        assert_eq!(document.wires.len(), 1);
-        assert_eq!(document.flags.len(), 6);
+        assert_eq!(document.wires.len(), 10);
+        assert_eq!(document.flags.len(), 11);
         assert_eq!(document.symbols.len(), 12);
     }
 
@@ -305,9 +349,6 @@ mod tests {
             .collect::<Vec<_>>();
         let total_files = asc_files.len();
 
-        let mut symbol_loader =
-            symbol_loader::SymbolLoader::new(Some(vec![PathBuf::from(&examples_path)]));
-
         println!("Found {} ASC files in LTspice lib", total_files);
         let start_time = std::time::Instant::now();
         for (current_index, entry) in asc_files.iter().enumerate() {
@@ -317,9 +358,7 @@ mod tests {
                 path.to_str().unwrap(),
                 current_index = current_index + 1
             );
-            let asc_file = Schematic::from_path_with_symbol_loader(path, symbol_loader)
-                .expect("Failed to read ASC file");
-            symbol_loader = asc_file.symbol_loader;
+            Schematic::from_path(path).expect("Failed to read ASC file");
         }
         let duration = start_time.elapsed();
         println!();

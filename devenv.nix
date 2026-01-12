@@ -9,12 +9,18 @@
   languages.rust = {
     enable = true;
     channel = "stable";
-    components = [ "rustc" "cargo" "clippy" "rustfmt" "rust-analyzer" "llvm-tools"];
+    components = [
+      "rustc"
+      "cargo"
+      "clippy"
+      "rustfmt"
+      "rust-analyzer"
+      "llvm-tools"
+    ];
   };
 
   git-hooks.hooks = {
     rustfmt.enable = true;
-    clippy.enable = true;
   };
 
   packages = [

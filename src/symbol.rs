@@ -8,8 +8,9 @@
 
 use crate::symbol_loader::SymbolLoader;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub enum SymbolRotation {
+    #[default]
     R0,
     R90,
     R180,
@@ -34,25 +35,22 @@ impl SymbolRotation {
             _ => None,
         }
     }
-}
 
-impl std::fmt::Display for SymbolRotation {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = match self {
-            SymbolRotation::R0 => "0",
-            SymbolRotation::R90 => "90",
-            SymbolRotation::R180 => "180",
-            SymbolRotation::R270 => "270",
-            SymbolRotation::M0 => "0",
-            SymbolRotation::M90 => "90",
-            SymbolRotation::M180 => "180",
-            SymbolRotation::M270 => "270",
-        };
-        write!(f, "{}", s)
+    pub fn as_int(&self) -> u16 {
+        match self {
+            SymbolRotation::R0 => 0,
+            SymbolRotation::R90 => 90,
+            SymbolRotation::R180 => 180,
+            SymbolRotation::R270 => 270,
+            SymbolRotation::M0 => 0,
+            SymbolRotation::M90 => 90,
+            SymbolRotation::M180 => 180,
+            SymbolRotation::M270 => 270,
+        }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct Symbol {
     pub symbol_id: String,
     pub position: (i32, i32),
@@ -60,16 +58,13 @@ pub struct Symbol {
 }
 
 impl Symbol {
-    pub fn from_line(line: &str, symbol_loader: &mut SymbolLoader) -> Result<Symbol, String> {
+    pub fn from_line(line: &str) -> Result<Symbol, String> {
         // The format is SYMBOL {Type} {PositionX} {PositionY} {Rotation} ...
         let parts = line.splitn(6, ' ').collect::<Vec<&str>>();
         if parts.len() < 5 || parts[0] != "SYMBOL" {
             return Err(format!("Invalid SYMBOL line: {}", line));
         }
-        let symbol_type = parts[1].to_string();
-        let symbol_id = symbol_loader
-            .load_symbol(&symbol_type)
-            .map_err(|e| e.to_string())?;
+        let symbol_id = parts[1].to_string();
         let position_x = parts[2].parse::<i32>().map_err(|e| e.to_string())?;
         let position_y = parts[3].parse::<i32>().map_err(|e| e.to_string())?;
         let rotation = SymbolRotation::from_str(parts[4])
@@ -90,6 +85,7 @@ impl Symbol {
         }
         let _attr_name = parts[1];
         let _attr_value = parts[2];
+        // todo!("Not implemented")
     }
 
     pub fn add_window_attribute(&mut self, _line: &str) {
@@ -102,6 +98,7 @@ impl Symbol {
         }
         let _window_type = parts[1];
         let _window_value = parts[2];
+        // todo!("Not implemented")
     }
 
     pub fn add_attribute(&mut self, _line: &str) {
@@ -118,6 +115,14 @@ impl Symbol {
             }
         }
     }
+
+    pub fn make_absolute(
+        &mut self,
+        symbol_loader: &mut SymbolLoader,
+    ) -> Result<(), std::io::Error> {
+        self.symbol_id = symbol_loader.load_symbol(&self.symbol_id)?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -127,9 +132,26 @@ mod tests {
     #[test]
     fn test_symbol_from_asc() {
         let line = "SYMBOL res 100 200 R0";
-        let mut symbol_loader = SymbolLoader::new(None);
-        let symbol = Symbol::from_line(line, &mut symbol_loader).unwrap();
+        let symbol = Symbol::from_line(line).unwrap();
         assert_eq!(symbol.position, (100, 200));
         assert_eq!(symbol.rotation, SymbolRotation::R0);
+    }
+
+    #[test]
+    fn test_add_symbol_attribute() {
+        let mut symbol = Symbol::default();
+        symbol.add_attribute("SYMATTR Value 10");
+        //assert_eq!(symbol.attributes.get("Value"), Some(&"10".to_string()));
+    }
+
+    #[test]
+    fn test_make_absolute() {
+        let mut symbol = Symbol {
+            symbol_id: "res".to_string(),
+            ..Default::default()
+        };
+        let mut symbol_loader = SymbolLoader::new(None);
+        symbol.make_absolute(&mut symbol_loader).unwrap();
+        assert_eq!(symbol.symbol_id, "res");
     }
 }

@@ -17,7 +17,7 @@ impl LineStyle {
             _ => LineStyle::Solid,
         }
     }
-    pub fn to_svg_dasharray(&self) -> &'static str {
+    pub fn to_svg_dasharray(self) -> &'static str {
         match self {
             LineStyle::Solid => "none",
             LineStyle::Dashed => "4,2",
@@ -103,8 +103,8 @@ impl Rectangle {
             LineStyle::Solid
         };
         Ok(Rectangle {
-            top_left: top_left,
-            bottom_right: bottom_right,
+            top_left,
+            bottom_right,
             style,
         })
     }
@@ -311,7 +311,7 @@ impl Text {
         // Remove 'V' if present to get actual justification
         let justification_str = if vertical { &parts[2][1..] } else { parts[2] };
         let justification = TextJustification::from_str(justification_str)?;
-        return Ok((position, justification, vertical));
+        Ok((position, justification, vertical))
     }
 
     pub fn parse_pin_line(line: &str) -> Result<Self, &str> {
@@ -358,7 +358,7 @@ impl Text {
         } else {
             // For non-symbols, check for type specifier
             (
-                Some(TextType::from_str(&parts[5]).unwrap()),
+                Some(TextType::from_str(parts[5]).unwrap()),
                 parts[5][1..].to_string(),
             )
         };

@@ -69,7 +69,7 @@ pub fn read_file_lines(path: &PathBuf) -> std::io::Result<Vec<String>> {
 
     let windows1252 = read_windows1252_file(path);
     // Check if the windows1252 read was successful and check if it contains any invalid characters
-    if windows1252.is_ok() && !check_null_characters(&windows1252.as_ref().unwrap()) {
+    if windows1252.is_ok() && !check_null_characters(windows1252.as_ref().unwrap()) {
         return windows1252;
     }
 
@@ -77,7 +77,7 @@ pub fn read_file_lines(path: &PathBuf) -> std::io::Result<Vec<String>> {
 
     let utf_8 = read_utf8_file(path);
     // Check if the utf-8 read was successful and check if it contains any invalid characters
-    if utf_8.is_ok() && !check_null_characters(&utf_8.as_ref().unwrap()) {
+    if utf_8.is_ok() && !check_null_characters(utf_8.as_ref().unwrap()) {
         return utf_8;
     }
 
@@ -85,7 +85,7 @@ pub fn read_file_lines(path: &PathBuf) -> std::io::Result<Vec<String>> {
 
     let utf_16 = read_utf16_file(path);
     // Check if the utf-16 read was successful and check if it contains any invalid characters
-    if utf_16.is_ok() && !check_null_characters(&utf_16.as_ref().unwrap()) {
+    if utf_16.is_ok() && !check_null_characters(utf_16.as_ref().unwrap()) {
         return utf_16;
     }
 

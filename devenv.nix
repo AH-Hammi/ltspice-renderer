@@ -1,7 +1,5 @@
 {
   pkgs,
-  lib,
-  config,
   ...
 }:
 {
@@ -17,10 +15,6 @@
       "rust-analyzer"
       "llvm-tools"
     ];
-  };
-
-  git-hooks.hooks = {
-    rustfmt.enable = true;
   };
 
   packages = [

@@ -1,3 +1,5 @@
+use crate::shape::Point;
+
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct BoundingBox {
     pub(crate) top_left: (f32, f32),
@@ -27,8 +29,8 @@ impl BoundingBox {
         }
     }
 
-    pub(crate) fn add_point_i32(&mut self, point: (i32, i32)) {
-        let point_f32 = (point.0 as f32, point.1 as f32);
+    pub(crate) fn add_point_i32(&mut self, point: Point) {
+        let point_f32 = (point.x as f32, point.y as f32);
         self.add_point(point_f32);
     }
 

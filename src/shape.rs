@@ -1,3 +1,9 @@
+#[derive(Default, Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
+pub struct Point {
+    pub x: i32,
+    pub y: i32,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LineStyle {
     Solid,
@@ -30,8 +36,8 @@ impl LineStyle {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Line {
-    pub(crate) start: (i32, i32),
-    pub(crate) end: (i32, i32),
+    pub(crate) start: Point,
+    pub(crate) end: Point,
     pub(crate) style: LineStyle,
 }
 
@@ -47,27 +53,30 @@ impl Line {
         if parts[1] != "Normal" {
             return None;
         }
-        let start_x = parts[2].parse::<i32>().ok()?;
-        let start_y = parts[3].parse::<i32>().ok()?;
-        let end_x = parts[4].parse::<i32>().ok()?;
-        let end_y = parts[5].parse::<i32>().ok()?;
+        let start = Point {
+            x: parts[2].parse::<i32>().ok()?,
+            y: parts[3].parse::<i32>().ok()?,
+        };
+        let end = Point {
+            x: parts[4].parse::<i32>().ok()?,
+            y: parts[5].parse::<i32>().ok()?,
+        };
         let style = if parts.len() > 6 {
             LineStyle::from_code(parts[6])
         } else {
             LineStyle::Solid
         };
-        Some(Line {
-            start: (start_x, start_y),
-            end: (end_x, end_y),
-            style,
-        })
+        if end < start {
+            return Some(Line { end, start, style });
+        }
+        Some(Line { start, end, style })
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Rectangle {
-    pub(crate) top_left: (i32, i32),
-    pub(crate) bottom_right: (i32, i32),
+    pub(crate) top_left: Point,
+    pub(crate) bottom_right: Point,
     pub(crate) style: LineStyle,
 }
 
@@ -83,20 +92,26 @@ impl Rectangle {
         if parts[1] != "Normal" {
             return Err("Not a Normal RECTANGLE line");
         }
-        let first = (
-            parts[2].parse::<i32>().map_err(|_| "Invalid top left x")?,
-            parts[3].parse::<i32>().map_err(|_| "Invalid top left y")?,
-        );
-        let second = (
-            parts[4]
+        let first = Point {
+            x: parts[2].parse::<i32>().map_err(|_| "Invalid top left x")?,
+            y: parts[3].parse::<i32>().map_err(|_| "Invalid top left y")?,
+        };
+        let second = Point {
+            x: parts[4]
                 .parse::<i32>()
                 .map_err(|_| "Invalid bottom right x")?,
-            parts[5]
+            y: parts[5]
                 .parse::<i32>()
                 .map_err(|_| "Invalid bottom right y")?,
-        );
-        let top_left = (first.0.min(second.0), first.1.min(second.1));
-        let bottom_right = (first.0.max(second.0), first.1.max(second.1));
+        };
+        let top_left = Point {
+            x: first.x.min(second.x),
+            y: first.y.min(second.y),
+        };
+        let bottom_right = Point {
+            x: first.x.max(second.x),
+            y: first.y.max(second.y),
+        };
         let style = if parts.len() > 6 {
             LineStyle::from_code(parts[6])
         } else {
@@ -112,8 +127,8 @@ impl Rectangle {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Circle {
-    pub(crate) top_left: (i32, i32),
-    pub(crate) bottom_right: (i32, i32),
+    pub(crate) top_left: Point,
+    pub(crate) bottom_right: Point,
     pub(crate) style: LineStyle,
 }
 impl Circle {
@@ -128,18 +143,30 @@ impl Circle {
         if parts[1] != "Normal" {
             return None;
         }
-        let top_left_x = parts[2].parse::<i32>().ok()?;
-        let top_left_y = parts[3].parse::<i32>().ok()?;
-        let bottom_right_x = parts[4].parse::<i32>().ok()?;
-        let bottom_right_y = parts[5].parse::<i32>().ok()?;
+        let mut top_left_x = parts[2].parse::<i32>().ok()?;
+        let mut top_left_y = parts[3].parse::<i32>().ok()?;
+        let mut bottom_right_x = parts[4].parse::<i32>().ok()?;
+        let mut bottom_right_y = parts[5].parse::<i32>().ok()?;
+        if top_left_x < bottom_right_x {
+            std::mem::swap(&mut top_left_x, &mut bottom_right_x);
+        }
+        if top_left_y < bottom_right_y {
+            std::mem::swap(&mut top_left_y, &mut bottom_right_y);
+        }
         let style = if parts.len() > 6 {
             LineStyle::from_code(parts[6])
         } else {
             LineStyle::Solid
         };
         Some(Circle {
-            top_left: (top_left_x, top_left_y),
-            bottom_right: (bottom_right_x, bottom_right_y),
+            top_left: Point {
+                x: top_left_x,
+                y: top_left_y,
+            },
+            bottom_right: Point {
+                x: bottom_right_x,
+                y: bottom_right_y,
+            },
             style,
         })
     }
@@ -147,10 +174,10 @@ impl Circle {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Arc {
-    pub(crate) top_left: (i32, i32),
-    pub(crate) bottom_right: (i32, i32),
-    pub(crate) end: (i32, i32),
-    pub(crate) start: (i32, i32),
+    pub(crate) top_left: Point,
+    pub(crate) bottom_right: Point,
+    pub(crate) end: Point,
+    pub(crate) start: Point,
     pub(crate) style: LineStyle,
 }
 
@@ -166,26 +193,26 @@ impl Arc {
         if parts[1] != "Normal" {
             return Err("Not a Normal ARC line");
         }
-        let top_left = (
-            parts[2].parse::<i32>().map_err(|_| "Invalid top left x")?,
-            parts[3].parse::<i32>().map_err(|_| "Invalid top left y")?,
-        );
-        let bottom_right = (
-            parts[4]
+        let top_left = Point {
+            x: parts[2].parse::<i32>().map_err(|_| "Invalid top left x")?,
+            y: parts[3].parse::<i32>().map_err(|_| "Invalid top left y")?,
+        };
+        let bottom_right = Point {
+            x: parts[4]
                 .parse::<i32>()
                 .map_err(|_| "Invalid bottom right x")?,
-            parts[5]
+            y: parts[5]
                 .parse::<i32>()
                 .map_err(|_| "Invalid bottom right y")?,
-        );
-        let end = (
-            parts[6].parse::<i32>().map_err(|_| "Invalid end x")?,
-            parts[7].parse::<i32>().map_err(|_| "Invalid end y")?,
-        );
-        let start = (
-            parts[8].parse::<i32>().map_err(|_| "Invalid start x")?,
-            parts[9].parse::<i32>().map_err(|_| "Invalid start y")?,
-        );
+        };
+        let end = Point {
+            x: parts[6].parse::<i32>().map_err(|_| "Invalid end x")?,
+            y: parts[7].parse::<i32>().map_err(|_| "Invalid end y")?,
+        };
+        let start = Point {
+            x: parts[8].parse::<i32>().map_err(|_| "Invalid start x")?,
+            y: parts[9].parse::<i32>().map_err(|_| "Invalid start y")?,
+        };
         let style = if parts.len() > 10 {
             LineStyle::from_code(parts[10])
         } else {
@@ -284,7 +311,7 @@ impl TextType {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Text {
-    pub(crate) position: (i32, i32),
+    pub(crate) position: Point,
     pub(crate) justification: TextJustification,
     pub(crate) vertical: bool,
     pub(crate) size: TextSize,
@@ -296,15 +323,15 @@ pub struct Text {
 impl Text {
     fn parse_position_and_justification(
         parts: Vec<&str>,
-    ) -> Result<((i32, i32), TextJustification, bool), &str> {
-        let position = (
-            parts[0]
+    ) -> Result<(Point, TextJustification, bool), &str> {
+        let position = Point {
+            x: parts[0]
                 .parse::<i32>()
                 .expect("Couldn't parse first number"),
-            parts[1]
+            y: parts[1]
                 .parse::<i32>()
                 .expect("Couldn't parse second number"),
-        );
+        };
 
         // If first character of justification is 'V', it's vertical
         let vertical = parts[2].starts_with('V');
@@ -405,42 +432,42 @@ mod tests {
     fn test_line_parsing() {
         let line_str = "LINE Normal 80 400 80 368 1";
         let line = Line::parse_line(line_str).unwrap();
-        assert_eq!(line.start, (80, 400));
-        assert_eq!(line.end, (80, 368));
+        assert_eq!(line.start, Point { x: 80, y: 400 });
+        assert_eq!(line.end, Point { x: 80, y: 368 });
         assert_eq!(line.style, LineStyle::Dashed);
     }
     #[test]
     fn test_rectangle_parsing() {
         let rect_str = "RECTANGLE Normal 80 448 0 416";
         let rectangle = Rectangle::parse_line(rect_str).unwrap();
-        assert_eq!(rectangle.top_left, (0, 416));
-        assert_eq!(rectangle.bottom_right, (80, 448));
+        assert_eq!(rectangle.top_left, Point { x: 0, y: 416 });
+        assert_eq!(rectangle.bottom_right, Point { x: 80, y: 448 });
         assert_eq!(rectangle.style, LineStyle::Solid);
     }
     #[test]
     fn test_rectangle_with_swapped_points_parsing() {
         let rect_str = "RECTANGLE Normal 336 272 -16 48 2";
         let rectangle = Rectangle::parse_line(rect_str).unwrap();
-        assert_eq!(rectangle.top_left, (-16, 48));
-        assert_eq!(rectangle.bottom_right, (336, 272));
+        assert_eq!(rectangle.top_left, Point { x: -16, y: 48 });
+        assert_eq!(rectangle.bottom_right, Point { x: 336, y: 272 });
         assert_eq!(rectangle.style, LineStyle::Dotted);
     }
     #[test]
     fn test_circle_parsing() {
         let circle_str = "CIRCLE Normal 64 528 0 464";
         let circle = Circle::parse_line(circle_str).unwrap();
-        assert_eq!(circle.top_left, (64, 528));
-        assert_eq!(circle.bottom_right, (0, 464));
+        assert_eq!(circle.top_left, Point { x: 64, y: 528 });
+        assert_eq!(circle.bottom_right, Point { x: 0, y: 464 });
         assert_eq!(circle.style, LineStyle::Solid);
     }
     #[test]
     fn test_arc_parsing() {
         let arc_str = "ARC Normal 0 544 64 608 64 576 0 576";
         let arc = Arc::parse_line(arc_str).unwrap();
-        assert_eq!(arc.top_left, (0, 544));
-        assert_eq!(arc.bottom_right, (64, 608));
-        assert_eq!(arc.end, (64, 576));
-        assert_eq!(arc.start, (0, 576));
+        assert_eq!(arc.top_left, Point { x: 0, y: 544 });
+        assert_eq!(arc.bottom_right, Point { x: 64, y: 608 });
+        assert_eq!(arc.end, Point { x: 64, y: 576 });
+        assert_eq!(arc.start, Point { x: 0, y: 576 });
         assert_eq!(arc.style, LineStyle::Solid);
     }
     #[test]
@@ -449,8 +476,8 @@ mod tests {
         let shape = Shape::parse_line(line_str, false).unwrap();
         match shape {
             Shape::Line(line) => {
-                assert_eq!(line.start, (80, 400));
-                assert_eq!(line.end, (80, 368));
+                assert_eq!(line.start, Point { x: 80, y: 400 });
+                assert_eq!(line.end, Point { x: 80, y: 368 });
                 assert_eq!(line.style, LineStyle::Dashed);
             }
             _ => panic!("Expected Shape::Line variant"),
@@ -460,7 +487,7 @@ mod tests {
     fn test_parse_text_with_comment() {
         let line = "TEXT 480 720 Center 2 ;This is a comment";
         let text = Text::parse_text_line(line, false).expect("Failed to parse TEXT line");
-        assert_eq!(text.position, (480, 720));
+        assert_eq!(text.position, Point { x: 480, y: 720 });
         assert_eq!(text.justification, TextJustification::Center);
         assert_eq!(text.size, TextSize::SIZE15);
         assert_eq!(text.text_type, Some(TextType::Comment));
@@ -471,7 +498,7 @@ mod tests {
     fn test_parse_text_with_spice_directive() {
         let line = "TEXT 100 200 Left 3 !.MODEL NPN N";
         let text = Text::parse_text_line(line, false).expect("Failed to parse TEXT line");
-        assert_eq!(text.position, (100, 200));
+        assert_eq!(text.position, Point { x: 100, y: 200 });
         assert_eq!(text.justification, TextJustification::Left);
         assert_eq!(text.size, TextSize::SIZE20);
         assert_eq!(text.text_type, Some(TextType::SpiceDirective));
@@ -482,7 +509,7 @@ mod tests {
     fn test_valid_symbol_text_line() {
         let line = "TEXT -64 0 Center 2 ADI";
         let text = Text::parse_text_line(line, true).expect("Failed to parse TEXT line");
-        assert_eq!(text.position, (-64, 0));
+        assert_eq!(text.position, Point { x: -64, y: 0 });
         assert_eq!(text.justification, TextJustification::Center);
         assert_eq!(text.size, TextSize::SIZE15);
         assert_eq!(text.text_type, None); // Default type when no specifier
@@ -493,7 +520,7 @@ mod tests {
     fn test_line_break_text() {
         let line = "TEXT -688 -248 Left 2 ;Note: 0.1 μF decoupling capacitors are required \non the primary and secondary supplies. If they \nare driven from the same supply, then one set of\n 0.1 μF decoupling capacitors is sufficient.";
         let text = Text::parse_text_line(line, false).expect("Failed to parse TEXT line");
-        assert_eq!(text.position, (-688, -248));
+        assert_eq!(text.position, Point { x: -688, y: -248 });
         assert_eq!(text.justification, TextJustification::Left);
         assert_eq!(text.size, TextSize::SIZE15);
         assert_eq!(text.text_type, Some(TextType::Comment));
@@ -504,7 +531,7 @@ mod tests {
     fn one_character_symbol_text_content() {
         let line = "TEXT -120 128 Left 3 −";
         let text = Text::parse_text_line(line, true).expect("Failed to parse TEXT line");
-        assert_eq!(text.position, (-120, 128));
+        assert_eq!(text.position, Point { x: -120, y: 128 });
         assert_eq!(text.justification, TextJustification::Left);
         assert_eq!(text.size, TextSize::SIZE20);
         assert_eq!(text.text_type, None);

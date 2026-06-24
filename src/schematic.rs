@@ -2,14 +2,14 @@
 
 use std::path::Path;
 
-use crate::shape::Shape;
+use crate::shape::{Point, Shape};
 use crate::symbol::Symbol;
 use crate::symbol_loader::SymbolLoader;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Wire {
-    pub start: (i32, i32),
-    pub end: (i32, i32),
+    pub start: Point,
+    pub end: Point,
 }
 
 impl Wire {
@@ -19,15 +19,32 @@ impl Wire {
         if parts.len() < 5 || parts[0] != "WIRE" {
             return None;
         }
-        let start_x = parts[1].parse::<i32>().ok()?;
-        let start_y = parts[2].parse::<i32>().ok()?;
-        let end_x = parts[3].parse::<i32>().ok()?;
-        let end_y = parts[4].parse::<i32>().ok()?;
+        let mut start_x = parts[1].parse::<i32>().ok()?;
+        let mut start_y = parts[2].parse::<i32>().ok()?;
+        let mut end_x = parts[3].parse::<i32>().ok()?;
+        let mut end_y = parts[4].parse::<i32>().ok()?;
+        if end_x < start_x {
+            std::mem::swap(&mut end_x, &mut start_x);
+        }
+        if start_x == end_x && end_y < start_y {
+            std::mem::swap(&mut end_y, &mut start_y);
+        }
         Some(Wire {
-            start: (start_x, start_y),
-            end: (end_x, end_y),
+            start: Point {
+                x: start_x,
+                y: start_y,
+            },
+            end: Point { x: end_x, y: end_y },
         })
     }
+
+    /// Checks if the provided point is somewhere in the area,
+    /// the wire spans
+    pub fn check_between(self, point: Point) {}
+
+    /**Checks if the point is on the wire.
+     */
+    pub fn check_is_on(self, point: Point) {}
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -285,8 +302,16 @@ mod tests {
     fn test_parse_wire() {
         let line = "WIRE 480 720 640 720";
         let wire = Wire::from_asc_line(line).expect("Failed to parse WIRE line");
-        assert_eq!(wire.start, (480, 720));
-        assert_eq!(wire.end, (640, 720));
+        assert_eq!(wire.start, Point { x: 480, y: 720 });
+        assert_eq!(wire.end, Point { x: 640, y: 720 });
+    }
+    #[test]
+    fn test_parse_wire_unique() {
+        let wire1 = Wire::from_asc_line("WIRE 480 720 640 720").expect("Failed to parse WIRE line");
+        let wire2 = Wire::from_asc_line("WIRE 640 720 480 720").expect("Failed to parse WIRE line");
+        assert_eq!(wire1, wire2);
+        assert_eq!(wire1.start, Point { x: 480, y: 720 });
+        assert_eq!(wire1.end, Point { x: 640, y: 720 });
     }
     #[test]
     fn test_parse_flag() {
@@ -313,7 +338,7 @@ mod tests {
     fn test_asc_example() {
         let document = Schematic::from_path(Path::new("test_files/complex_sample.asc"))
             .expect("Failed to read ASC file");
-        assert_eq!(document.wires.len(), 10);
+        assert_eq!(document.wires.len(), 22);
         assert_eq!(document.flags.len(), 11);
         assert_eq!(document.symbols.len(), 12);
     }

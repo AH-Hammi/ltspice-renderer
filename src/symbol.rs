@@ -48,6 +48,13 @@ impl SymbolRotation {
             SymbolRotation::M270 => 270,
         }
     }
+
+    pub fn is_mirror(&self) -> bool {
+        matches!(
+            self,
+            SymbolRotation::M0 | SymbolRotation::M90 | SymbolRotation::M180 | SymbolRotation::M270
+        )
+    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]

@@ -337,7 +337,7 @@ impl SymbolLoader {
 mod tests {
     use std::path::PathBuf;
 
-    use crate::shape::TextJustification;
+    use crate::shape::{Point, TextJustification};
 
     use super::*;
 
@@ -345,7 +345,7 @@ mod tests {
     fn test_pin_from_line() {
         let line = "PIN -128 0 Left 8";
         let pin = Pin::from_line(line).unwrap();
-        assert_eq!(pin.text.position, (-128, 0));
+        assert_eq!(pin.text.position, Point { x: -128, y: 0 });
         assert_eq!(pin.text.justification, TextJustification::Left);
         assert_eq!(pin.text.offset, 8)
     }
@@ -354,7 +354,7 @@ mod tests {
     fn test_pin_add_attribute() {
         let mut pin = Pin {
             text: Text {
-                position: (100, 200),
+                position: Point { x: 100, y: 200 },
                 content: String::new(),
                 justification: TextJustification::Left,
                 vertical: false,

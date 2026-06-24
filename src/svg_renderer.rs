@@ -9,6 +9,7 @@ use crate::bounding_box::BoundingBox;
 use crate::schematic;
 use crate::schematic::Schematic;
 use crate::shape;
+use crate::shape::Point;
 use crate::symbol;
 use crate::symbol_loader;
 
@@ -33,10 +34,10 @@ impl SvgRender for shape::Rectangle {
     fn to_svg(&self) -> Option<(Box<dyn svg::node::Node>, BoundingBox)> {
         let stroke_width = 1.;
         let rect = Rectangle::new()
-            .set("x", self.top_left.0)
-            .set("y", self.top_left.1)
-            .set("width", self.bottom_right.0 - self.top_left.0)
-            .set("height", self.bottom_right.1 - self.top_left.1)
+            .set("x", self.top_left.x)
+            .set("y", self.top_left.y)
+            .set("width", self.bottom_right.x - self.top_left.x)
+            .set("height", self.bottom_right.y - self.top_left.y)
             .set("fill", "none")
             .set("stroke", "black")
             .set("stroke-linecap", "round")
@@ -55,13 +56,13 @@ impl SvgRender for shape::Circle {
         let circle = Circle::new()
             .set(
                 "cx",
-                self.top_left.0 + (self.bottom_right.0 - self.top_left.0) / 2,
+                self.top_left.x + (self.bottom_right.x - self.top_left.x) / 2,
             )
             .set(
                 "cy",
-                self.top_left.1 + (self.bottom_right.1 - self.top_left.1) / 2,
+                self.top_left.y + (self.bottom_right.y - self.top_left.y) / 2,
             )
-            .set("r", (self.bottom_right.0 - self.top_left.0) / 2)
+            .set("r", (self.bottom_right.x - self.top_left.x) / 2)
             .set("fill", "none")
             .set("stroke", "black");
         let mut bounding_box = BoundingBox::new();
@@ -74,10 +75,10 @@ impl SvgRender for shape::Circle {
 impl SvgRender for shape::Line {
     fn to_svg(&self) -> Option<(Box<dyn svg::node::Node>, BoundingBox)> {
         let line = Line::new()
-            .set("x1", self.start.0)
-            .set("y1", self.start.1)
-            .set("x2", self.end.0)
-            .set("y2", self.end.1)
+            .set("x1", self.start.x)
+            .set("y1", self.start.y)
+            .set("x2", self.end.x)
+            .set("y2", self.end.y)
             .set("stroke", "black")
             .set("stroke-width", "1")
             .set("stroke-linecap", "round")
@@ -122,8 +123,8 @@ impl SvgRender for shape::Text {
         };
 
         let mut text = Text::new(self.content.as_str())
-            .set("x", self.position.0)
-            .set("y", self.position.1)
+            .set("x", self.position.x)
+            .set("y", self.position.y)
             .set("dx", x_offset)
             .set("dy", y_offset)
             .set("font-size", format!("{}px", font_size))
@@ -145,7 +146,7 @@ impl SvgRender for shape::Text {
         if self.vertical {
             text = text.set(
                 "transform",
-                format!("rotate(-90, {}, {})", self.position.0, self.position.1),
+                format!("rotate(-90, {}, {})", self.position.x, self.position.y),
             );
         }
 
@@ -161,24 +162,24 @@ impl SvgRender for shape::Text {
                 if self.vertical {
                     // Extend the bounding box to the right top edge of the text
                     bounding_box.add_point((
-                        self.position.0 as f32 - text_height / 2.,
-                        self.position.1 as f32 - text_width,
+                        self.position.x as f32 - text_height / 2.,
+                        self.position.y as f32 - text_width,
                     ));
                     // Extend the bounding box to the bottom right edge of the text
                     bounding_box.add_point((
-                        self.position.0 as f32 + text_height / 2.,
-                        self.position.1 as f32,
+                        self.position.x as f32 + text_height / 2.,
+                        self.position.y as f32,
                     ));
                 } else {
                     // Top right of the text
                     bounding_box.add_point((
-                        self.position.0 as f32 + text_width,
-                        self.position.1 as f32 - text_height / 2.,
+                        self.position.x as f32 + text_width,
+                        self.position.y as f32 - text_height / 2.,
                     ));
                     // Bottom left of the text
                     bounding_box.add_point((
-                        self.position.0 as f32,
-                        self.position.1 as f32 + text_height / 2.,
+                        self.position.x as f32,
+                        self.position.y as f32 + text_height / 2.,
                     ));
                 }
             }
@@ -186,24 +187,24 @@ impl SvgRender for shape::Text {
                 if self.vertical {
                     // Top left of the text
                     bounding_box.add_point((
-                        self.position.0 as f32 - text_height / 2.,
-                        self.position.1 as f32 - text_width / 2.,
+                        self.position.x as f32 - text_height / 2.,
+                        self.position.y as f32 - text_width / 2.,
                     ));
                     // Bottom right of the text
                     bounding_box.add_point((
-                        self.position.0 as f32 + text_height / 2.,
-                        self.position.1 as f32 + text_width / 2.,
+                        self.position.x as f32 + text_height / 2.,
+                        self.position.y as f32 + text_width / 2.,
                     ));
                 } else {
                     // Top Left
                     bounding_box.add_point((
-                        self.position.0 as f32 - text_width / 2.,
-                        self.position.1 as f32 - text_height / 2.,
+                        self.position.x as f32 - text_width / 2.,
+                        self.position.y as f32 - text_height / 2.,
                     ));
                     // Bottom Right
                     bounding_box.add_point((
-                        self.position.0 as f32 + text_width / 2.,
-                        self.position.1 as f32 + text_height / 2.,
+                        self.position.x as f32 + text_width / 2.,
+                        self.position.y as f32 + text_height / 2.,
                     ));
                 }
             }
@@ -211,24 +212,24 @@ impl SvgRender for shape::Text {
                 if self.vertical {
                     // Top Left
                     bounding_box.add_point((
-                        self.position.0 as f32 - text_height / 2.,
-                        self.position.1 as f32,
+                        self.position.x as f32 - text_height / 2.,
+                        self.position.y as f32,
                     ));
                     // Bottom Right
                     bounding_box.add_point((
-                        self.position.0 as f32 + text_height / 2.,
-                        self.position.1 as f32 + text_width,
+                        self.position.x as f32 + text_height / 2.,
+                        self.position.y as f32 + text_width,
                     ));
                 } else {
                     // Top Left
                     bounding_box.add_point((
-                        self.position.0 as f32 - text_width,
-                        self.position.1 as f32 - text_height / 2.,
+                        self.position.x as f32 - text_width,
+                        self.position.y as f32 - text_height / 2.,
                     ));
                     // Bottom Right
                     bounding_box.add_point((
-                        self.position.0 as f32,
-                        self.position.1 as f32 + text_height / 2.,
+                        self.position.x as f32,
+                        self.position.y as f32 + text_height / 2.,
                     ));
                 }
             }
@@ -236,45 +237,45 @@ impl SvgRender for shape::Text {
                 if self.vertical {
                     // Top Left
                     bounding_box.add_point((
-                        self.position.0 as f32,
-                        self.position.1 as f32 - text_width / 2.,
+                        self.position.x as f32,
+                        self.position.y as f32 - text_width / 2.,
                     ));
                     // Bottom Right
                     bounding_box.add_point((
-                        self.position.0 as f32 + text_height,
-                        self.position.1 as f32 + text_width / 2.,
+                        self.position.x as f32 + text_height,
+                        self.position.y as f32 + text_width / 2.,
                     ));
                 } else {
                     // Top Left
                     bounding_box.add_point((
-                        self.position.0 as f32 - text_width / 2.,
-                        self.position.1 as f32,
+                        self.position.x as f32 - text_width / 2.,
+                        self.position.y as f32,
                     ));
                     // Bottom Right
                     bounding_box.add_point((
-                        self.position.0 as f32 + text_width / 2.,
-                        self.position.1 as f32 + text_height,
+                        self.position.x as f32 + text_width / 2.,
+                        self.position.y as f32 + text_height,
                     ));
                 }
             }
             shape::TextJustification::Bottom => {
                 if self.vertical {
                     bounding_box.add_point((
-                        self.position.0 as f32 - text_height,
-                        self.position.1 as f32 - text_width / 2.,
+                        self.position.x as f32 - text_height,
+                        self.position.y as f32 - text_width / 2.,
                     ));
                     bounding_box.add_point((
-                        self.position.0 as f32,
-                        self.position.1 as f32 + text_width / 2.,
+                        self.position.x as f32,
+                        self.position.y as f32 + text_width / 2.,
                     ));
                 } else {
                     bounding_box.add_point((
-                        self.position.0 as f32 - text_width / 2.,
-                        self.position.1 as f32 - text_height,
+                        self.position.x as f32 - text_width / 2.,
+                        self.position.y as f32 - text_height,
                     ));
                     bounding_box.add_point((
-                        self.position.0 as f32 + text_width / 2.,
-                        self.position.1 as f32,
+                        self.position.x as f32 + text_width / 2.,
+                        self.position.y as f32,
                     ));
                 }
             }
@@ -301,12 +302,12 @@ impl SvgRender for Shape {
 impl SvgRender for schematic::Wire {
     fn to_svg(&self) -> Option<(Box<dyn svg::node::Node>, BoundingBox)> {
         let line = Line::new()
-            .set("x1", self.start.0)
-            .set("y1", self.start.1)
-            .set("x2", self.end.0)
-            .set("y2", self.end.1)
+            .set("x1", self.start.x)
+            .set("y1", self.start.y)
+            .set("x2", self.end.x)
+            .set("y2", self.end.y)
             .set("stroke", "black")
-            .set("stroke-width", "2")
+            .set("stroke-width", 1)
             .set("stroke-linecap", "round");
         let mut bounding_box = BoundingBox::new();
         bounding_box.add_point_i32(self.start);
@@ -327,6 +328,17 @@ impl symbol_loader::LibrarySymbol {
         let mut symbol = Symbol::new().set("id", id);
 
         let mut bounding_box = BoundingBox::new();
+        // Add the origin to the bounding box
+        bounding_box.add_point_i32(Point::default());
+
+        // Add circle on the origin
+        let origin_circle = Circle::new()
+            .set("cx", 0)
+            .set("cy", 0)
+            .set("r", 1)
+            .set("fill", "none")
+            .set("stroke", "black");
+        symbol = symbol.add(origin_circle);
 
         for shape in &self.shapes {
             if let Some((svg, shape_bounding_box)) = shape.to_svg() {
@@ -370,11 +382,19 @@ impl symbol::Symbol {
         library_bounding_box: BoundingBox,
     ) -> Option<(Box<dyn svg::node::Node>, BoundingBox)> {
         let mut bounding_box = library_bounding_box;
+        let scale = if self.rotation.is_mirror() { -1.0 } else { 1.0 };
         let use_symbol = Use::new()
             .set("href", format!("#{}", self.symbol_id.as_str()))
-            .set("x", self.position.0)
-            .set("y", self.position.1)
-            .set("transform", format!("rotate({})", self.rotation.as_int()));
+            .set(
+                "transform",
+                format!(
+                    "translate({x},{y}) rotate({rotation}) scale(1,{scale}) ",
+                    x = self.position.0,
+                    y = self.position.1,
+                    rotation = self.rotation.as_int(),
+                    scale = scale,
+                ),
+            );
         // Add windowing attributes
 
         bounding_box.translate((self.position.0 as f32, self.position.1 as f32));
@@ -387,15 +407,48 @@ impl symbol_loader::SymbolLoader {
     fn to_svg(&self) -> Option<(Box<dyn svg::node::Node>, HashMap<String, BoundingBox>)> {
         let mut group = Group::new();
         let mut bounding_box_per_id: HashMap<String, BoundingBox> = HashMap::new();
-
         for (id, library_symbol) in self.used_symbols.iter() {
             if let Some((svg, symbol_bounding_box)) = library_symbol.to_svg(id) {
                 group = group.add(svg);
                 bounding_box_per_id.insert(id.clone(), symbol_bounding_box);
             }
         }
-
         Some((Box::new(group), bounding_box_per_id))
+    }
+}
+
+struct ConnectedWire {
+    wires: Vec<schematic::Wire>,
+}
+
+impl ConnectedWire {
+    fn new() -> Self {
+        Self { wires: Vec::new() }
+    }
+
+    fn is_connected(&self, point: Point) -> bool {
+        self.wires
+            .iter()
+            .any(|wire| wire.start == point || wire.end == point)
+    }
+
+    fn add(&mut self, wire: schematic::Wire) {
+        self.wires.push(wire);
+    }
+
+    fn combine(&mut self, other: Self) {
+        self.wires.extend(other.wires);
+    }
+
+    fn on_wire(&self, flag: schematic::Flag) -> bool {
+        // Check if the flag is on a wire.
+        // Each wire is a line between two points.
+        for wire in self.wires.iter() {
+            // Check if x is between the start and end point
+            return (wire.start.x < flag.position.0 && flag.position.0 < wire.end.x)
+                || (wire.end.x < flag.position.0 && flag.position.0 < wire.start.x);
+        }
+        return false;
     }
 }
 
@@ -407,10 +460,24 @@ pub fn generate_svg_from_schematic(schematic_path: &Path) -> Result<SVG, Error> 
 
     let mut schematic_bounding_box = BoundingBox::new();
 
+    let mut connected_wires: Vec<ConnectedWire> = Vec::new();
+
+    // Build the connected_wires map
     for wire in &schematic.wires {
-        if let Some((svg, local_bounding_box)) = wire.to_svg() {
-            document = document.add(svg);
-            schematic_bounding_box.merge(&local_bounding_box);
+        let start = wire.start;
+        let end = wire.end;
+        for connected_wire in connected_wires.iter_mut() {
+            if connected_wire.is_connected(start) || connected_wire.is_connected(end) {
+                connected_wire.add(wire.clone());
+                break;
+            }
+        }
+        if !connected_wires
+            .iter()
+            .any(|wire| wire.is_connected(start) || wire.is_connected(end))
+        {
+            connected_wires.push(ConnectedWire::new());
+            connected_wires.last_mut().unwrap().add(wire.clone());
         }
     }
 

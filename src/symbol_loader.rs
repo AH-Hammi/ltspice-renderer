@@ -85,6 +85,15 @@ impl LibrarySymbol {
         let content = read_file_lines(path)?;
         Ok(LibrarySymbol::parse(content))
     }
+
+    pub fn from_bytes(data: &[u8]) -> Result<LibrarySymbol, std::io::Error> {
+        let content = std::str::from_utf8(data)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?
+            .lines()
+            .map(|s| s.to_string())
+            .collect();
+        Ok(LibrarySymbol::parse(content))
+    }
     pub fn parse(lines: Vec<String>) -> LibrarySymbol {
         let mut pins: Vec<Pin> = Vec::new();
         let mut shapes: Vec<Shape> = Vec::new();
@@ -176,6 +185,7 @@ pub struct SymbolLoader {
     available_symbols: HashMap<String, PathBuf>,
     short_name_to_id: HashMap<String, String>,
     pub(crate) used_symbols: HashMap<String, LibrarySymbol>,
+    downloaded_library: HashMap<String, Vec<u8>>,
 }
 
 impl SymbolLoader {
@@ -197,7 +207,6 @@ impl SymbolLoader {
             panic!("MacOS LTspice library path not implemented yet");
         } else if cfg!(target_os = "linux") {
             let user_name = std::env::var("USER").unwrap();
-            // LTspice on Linux via Wine
             let mut local_share =
                 PathBuf::from(format!("/home/{user}/.local/share", user = user_name));
             let wineprefixes = local_share.join("wineprefixes");
@@ -215,10 +224,7 @@ impl SymbolLoader {
                 )),
             ];
         }
-        panic!(
-            "Unsupported OS for default LTspice library paths {}",
-            std::env::consts::OS
-        );
+        Vec::new()
     }
 
     pub fn new(extra_library_paths: Option<Vec<PathBuf>>) -> Self {
@@ -227,10 +233,76 @@ impl SymbolLoader {
 
         let (available_symbols, name_to_full_name) = Self::load_available_symbols(library_paths);
 
-        SymbolLoader {
+        let mut loader = SymbolLoader {
             available_symbols,
             short_name_to_id: name_to_full_name,
             used_symbols: HashMap::new(),
+            downloaded_library: HashMap::new(),
+        };
+
+        #[cfg(not(target_arch = "wasm32"))]
+        if loader.available_symbols.is_empty() {
+            loader.auto_download_blocking();
+        }
+
+        loader
+    }
+
+    pub async fn download_async(&mut self) {
+        match crate::lib_downloader::download_library().await {
+            Ok(files) => {
+                self.populate_from_download(files);
+                println!(
+                    "Downloaded {} library files",
+                    self.downloaded_library.len()
+                );
+            }
+            Err(e) => {
+                eprintln!("Failed to download library: {e}");
+            }
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn auto_download_blocking(&mut self) {
+        println!("No local symbols found, downloading LTspice library...");
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap();
+        match rt.block_on(crate::lib_downloader::download_library()) {
+            Ok(files) => {
+                self.populate_from_download(files);
+                println!(
+                    "Downloaded {} library files",
+                    self.downloaded_library.len()
+                );
+            }
+            Err(e) => {
+                eprintln!("Auto-download failed: {e}");
+            }
+        }
+    }
+
+    fn populate_from_download(&mut self, files: std::collections::HashMap<String, Vec<u8>>) {
+        for (path, data) in &files {
+            let lower = path.to_lowercase();
+            if lower.ends_with(".asy") {
+                let key = path
+                    .strip_suffix(".asy")
+                    .unwrap()
+                    .replace('\\', "/")
+                    .to_lowercase();
+                let key = key
+                    .strip_prefix("sym/")
+                    .or_else(|| key.strip_prefix("sym\\"))
+                    .unwrap_or(&key)
+                    .to_string();
+                self.downloaded_library.insert(key.clone(), data.clone());
+                let short_name = key.split('/').next_back().unwrap_or(&key).to_string();
+                self.short_name_to_id
+                    .entry(short_name)
+                    .or_insert_with(|| key.clone());
+            }
         }
     }
 
@@ -323,9 +395,21 @@ impl SymbolLoader {
         match symbol_id {
             Err(e) => Err(e),
             Ok(symbol_id) => {
+                if self.used_symbols.contains_key(&symbol_id) {
+                    return Ok(symbol_id);
+                }
                 self.used_symbols.insert(
                     symbol_id.clone(),
-                    LibrarySymbol::from_path(&self.available_symbols[&symbol_id])?,
+                    if let Some(path) = self.available_symbols.get(&symbol_id) {
+                        LibrarySymbol::from_path(path)?
+                    } else if let Some(data) = self.downloaded_library.get(&symbol_id) {
+                        LibrarySymbol::from_bytes(data)?
+                    } else {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::NotFound,
+                            format!("Symbol not found: {symbol_id}"),
+                        ));
+                    },
                 );
                 Ok(symbol_id)
             }

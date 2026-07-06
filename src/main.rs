@@ -4,6 +4,7 @@ use crate::svg_renderer::generate_svg_from_schematic;
 
 mod bounding_box;
 mod file_reader;
+mod lib_downloader;
 mod schematic;
 mod shape;
 mod svg_renderer;
